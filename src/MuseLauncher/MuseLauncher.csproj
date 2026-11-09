@@ -9,8 +9,8 @@
     <LangVersion>12</LangVersion>
     <RootNamespace>MuseLauncher</RootNamespace>
     <AssemblyName>MuseLauncher</AssemblyName>
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0</FileVersion>
+    <Version>1.0.1</Version>
+    <FileVersion>1.0.1</FileVersion>
     <Product>Muse 登录器 (Windows)</Product>
     <ApplicationIcon>app_icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>

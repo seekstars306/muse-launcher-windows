@@ -92,36 +92,110 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="56"/>
+            <ColumnDefinition x:Name="SidebarCol" Width="56"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- ======= 左侧窄条（收起态账号列表） ======= -->
-        <Border x:Name="Rail" Grid.Column="0" Background="#0F1114">
-            <DockPanel LastChildFill="True">
-                <Button DockPanel.Dock="Top" x:Name="BtnRailExpand" Style="{StaticResource IconButton}"
-                        ToolTip="展开账号列表" Margin="8,8,8,0" Click="OnRailExpandClick">
-                    <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
-                </Button>
-
-                <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,8">
-                    <Button x:Name="BtnFullscreen" Style="{StaticResource IconButton}"
-                            ToolTip="全屏显示当前账号 (F11)" Click="OnFullscreenClick">
-                        <TextBlock Text="&#xE740;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
+        <!-- ======= 左侧栏容器（Column 0）：收起态(56px) / 展开态(274px)，与主区WebView水平并列，彻底避免Airspace覆盖问题 ======= -->
+        <Border Grid.Column="0" Background="#0F1114" BorderBrush="#23262D" BorderThickness="0,0,1,0">
+            <Grid>
+                <!-- ======= 收起态：左侧窄条（56px） ======= -->
+                <DockPanel x:Name="Rail" Width="56" LastChildFill="True" Visibility="Visible">
+                    <Button DockPanel.Dock="Top" x:Name="BtnRailExpand" Style="{StaticResource IconButton}"
+                            ToolTip="展开账号列表" Margin="8,8,8,0" Click="OnRailExpandClick">
+                        <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
                     </Button>
-                    <Button x:Name="BtnRailAdd" Style="{StaticResource IconButton}"
-                            ToolTip="新建账号环境" Click="OnAddAccountClick">
-                        <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#3D7FFF"/>
-                    </Button>
-                </StackPanel>
 
-                <ScrollViewer VerticalScrollBarVisibility="Hidden" Padding="0,2">
-                    <StackPanel x:Name="RailAvatars"/>
-                </ScrollViewer>
-            </DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,8">
+                        <Button x:Name="BtnFullscreen" Style="{StaticResource IconButton}"
+                                ToolTip="全屏显示当前账号 (F11)" Click="OnFullscreenClick">
+                            <TextBlock Text="&#xE740;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
+                        </Button>
+                        <Button x:Name="BtnRailAdd" Style="{StaticResource IconButton}"
+                                ToolTip="新建账号环境" Click="OnAddAccountClick">
+                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#3D7FFF"/>
+                        </Button>
+                    </StackPanel>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Hidden" Padding="0,2">
+                        <StackPanel x:Name="RailAvatars"/>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <!-- ======= 展开态：完整账号侧栏（274px） ======= -->
+                <DockPanel x:Name="DrawerContent" Width="274" LastChildFill="True" Visibility="Collapsed" Background="#121419">
+                    <!-- 标题栏：标题 + 收起按钮 -->
+                    <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="14,16,14,4">
+                        <StackPanel>
+                            <TextBlock Text="Muse 账号" Foreground="#E9EBEE" FontSize="16.5" FontWeight="Bold"/>
+                            <TextBlock x:Name="AccCount" Foreground="#8A9099" FontSize="11.5" Margin="0,3,0,0"/>
+                        </StackPanel>
+                        <Button x:Name="BtnCollapse" DockPanel.Dock="Right" Width="34" Height="34"
+                                Style="{StaticResource IconButtonSm}" ToolTip="收起列表" Click="OnCollapseClick">
+                            <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#AEB4BD"/>
+                        </Button>
+                    </DockPanel>
+
+                    <!-- 搜索框 -->
+                    <Border DockPanel.Dock="Top" Background="#0F1114" CornerRadius="10"
+                            Margin="12,8,12,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="13" Foreground="#6F7680" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            <TextBox x:Name="SearchInput" TextChanged="OnSearchTextChanged"
+                                     VerticalContentAlignment="Center" FontSize="13.5"
+                                     Foreground="#E9EBEE" Background="Transparent" BorderThickness="0"
+                                     Padding="0" Margin="11,0,12,0" Height="38"
+                                     VerticalAlignment="Center">
+                                <TextBox.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#686E78"/>
+                                    </Style>
+                                </TextBox.Resources>
+                            </TextBox>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- 搜索空态 -->
+                    <TextBlock x:Name="DrawerEmpty" DockPanel.Dock="Bottom" Text="没有匹配的账号"
+                               Foreground="#8A9099" FontSize="12.5" TextAlignment="Center" Padding="0,18"
+                               Visibility="Collapsed"/>
+
+                    <!-- 添加账号卡片 -->
+                    <Border x:Name="BtnAddAccount" DockPanel.Dock="Bottom" Background="#151A22"
+                            CornerRadius="12" Margin="12,0,12,10" Padding="12" Cursor="Hand"
+                            MouseLeftButtonUp="OnAddAccountClick">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Left" Width="36" Height="36" CornerRadius="18"
+                                    Background="#0F1114">
+                                <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                           Foreground="#3D7FFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="添加 Muse 账号" Foreground="#E9EBEE" FontSize="14" FontWeight="Bold"/>
+                                <TextBlock Text="新开一个独立无痕的 muse.ai 页面" Foreground="#8A9099" FontSize="11.5" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- 脚注 -->
+                    <DockPanel DockPanel.Dock="Bottom" Margin="16,12,16,16">
+                        <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="Segoe MDL2 Assets"
+                                   FontSize="12" Foreground="#6F7680" VerticalAlignment="Top" Margin="0,2,0,0"/>
+                        <TextBlock Text="每个账号使用完全隔离的存储环境，登录后状态持久保留，账号之间互不串数据。"
+                                   Foreground="#8A9099" FontSize="11.5" LineHeight="18" Margin="8,0,0,0"
+                                   TextWrapping="Wrap"/>
+                    </DockPanel>
+
+                    <!-- 账号列表（最后声明 = 填充剩余垂直空间） -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="AccountList" Margin="10"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Grid>
         </Border>
 
-        <!-- ======= 主区 ======= -->
+        <!-- ======= 主区（Column 1） ======= -->
         <Grid Grid.Column="1" Background="#121316">
             <!-- 账号 WebView 容器：每个账号一个独立 WebView，切换时换显示 -->
             <Grid x:Name="WebContainer" Background="#121316"/>
@@ -180,92 +254,14 @@
                 </StackPanel>
             </Grid>
 
-            <!-- 轻提示 -->
-            <Border x:Name="ToastHost" Visibility="Collapsed" HorizontalAlignment="Center"
-                    VerticalAlignment="Bottom" Margin="0,0,0,28" Background="#F01D1F24"
-                    CornerRadius="8" Padding="14,8">
-                <TextBlock x:Name="ToastText" Foreground="#E9EBEE" FontSize="12.5"/>
-            </Border>
-
-            <!-- ======= 抽屉（展开态账号列表） ======= -->
-            <Grid x:Name="DrawerRoot" Visibility="Collapsed">
-                <Border x:Name="DrawerBackdrop" Background="#80000000" MouseLeftButtonDown="OnBackdropClick"/>
-                <Border x:Name="DrawerContent" Width="274" HorizontalAlignment="Left"
-                        Background="#121419" BorderBrush="#23262D" BorderThickness="0,0,1,0">
-                    <Border.RenderTransform>
-                        <TranslateTransform x:Name="DrawerTranslate" X="0"/>
-                    </Border.RenderTransform>
-                    <DockPanel>
-                        <!-- 标题 -->
-                        <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="14,16,14,4">
-                            <StackPanel>
-                                <TextBlock Text="Muse 账号" Foreground="#E9EBEE" FontSize="16.5" FontWeight="Bold"/>
-                                <TextBlock x:Name="AccCount" Foreground="#8A9099" FontSize="11.5" Margin="0,3,0,0"/>
-                            </StackPanel>
-                            <Button x:Name="BtnCollapse" DockPanel.Dock="Right" Width="34" Height="34"
-                                    Style="{StaticResource IconButtonSm}" ToolTip="收起列表" Click="OnCollapseClick">
-                                <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#AEB4BD"/>
-                            </Button>
-                        </DockPanel>
-
-                        <!-- 搜索框 -->
-                        <Border DockPanel.Dock="Top" Background="#0F1114" CornerRadius="10"
-                                Margin="12,8,12,0">
-                            <DockPanel>
-                                <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="Segoe MDL2 Assets"
-                                           FontSize="13" Foreground="#6F7680" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                                <TextBox x:Name="SearchInput" TextChanged="OnSearchTextChanged"
-                                         VerticalContentAlignment="Center" FontSize="13.5"
-                                         Foreground="#E9EBEE" Background="Transparent" BorderThickness="0"
-                                         Padding="0" Margin="11,0,12,0" Height="38"
-                                         VerticalAlignment="Center">
-                                    <TextBox.Resources>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="#686E78"/>
-                                        </Style>
-                                    </TextBox.Resources>
-                                </TextBox>
-                            </DockPanel>
-                        </Border>
-
-                        <!-- 搜索空态 -->
-                        <TextBlock x:Name="DrawerEmpty" DockPanel.Dock="Bottom" Text="没有匹配的账号"
-                                   Foreground="#8A9099" FontSize="12.5" TextAlignment="Center" Padding="0,18"
-                                   Visibility="Collapsed"/>
-
-                        <!-- 添加账号卡片 -->
-                        <Border x:Name="BtnAddAccount" DockPanel.Dock="Bottom" Background="#151A22"
-                                CornerRadius="12" Margin="12,0,12,10" Padding="12" Cursor="Hand"
-                                MouseLeftButtonUp="OnAddAccountClick">
-                            <DockPanel>
-                                <Border DockPanel.Dock="Left" Width="36" Height="36" CornerRadius="18"
-                                        Background="#0F1114">
-                                    <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                               Foreground="#3D7FFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="添加 Muse 账号" Foreground="#E9EBEE" FontSize="14" FontWeight="Bold"/>
-                                    <TextBlock Text="新开一个独立无痕的 muse.ai 页面" Foreground="#8A9099" FontSize="11.5" Margin="0,2,0,0"/>
-                                </StackPanel>
-                            </DockPanel>
-                        </Border>
-
-                        <!-- 脚注 -->
-                        <DockPanel DockPanel.Dock="Bottom" Margin="16,12,16,16">
-                            <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="Segoe MDL2 Assets"
-                                       FontSize="12" Foreground="#6F7680" VerticalAlignment="Top" Margin="0,2,0,0"/>
-                            <TextBlock Text="每个账号使用完全隔离的存储环境，登录后状态持久保留，账号之间互不串数据。"
-                                       Foreground="#8A9099" FontSize="11.5" LineHeight="18" Margin="8,0,0,0"
-                                       TextWrapping="Wrap"/>
-                        </DockPanel>
-
-                        <!-- 账号列表（最后声明 = 填充剩余空间） -->
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel x:Name="AccountList" Margin="10"/>
-                        </ScrollViewer>
-                    </DockPanel>
+            <!-- 轻提示：采用原生 Popup 窗口，悬浮于 WebView2 之上，不受 HWND Airspace 影响 -->
+            <Popup x:Name="ToastPopup" PlacementTarget="{Binding ElementName=WebContainer}"
+                   Placement="Center" AllowsTransparency="True" StaysOpen="True">
+                <Border Background="#F01D1F24" CornerRadius="8" Padding="16,10"
+                        BorderBrush="#2A2E36" BorderThickness="1">
+                    <TextBlock x:Name="ToastText" Foreground="#E9EBEE" FontSize="13"/>
                 </Border>
-            </Grid>
+            </Popup>
         </Grid>
     </Grid>
 </Window>

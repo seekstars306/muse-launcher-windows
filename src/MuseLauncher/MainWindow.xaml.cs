@@ -177,8 +177,9 @@ public partial class MainWindow : Window
         if (fullscreen) return;
         fullscreen = true;
         store.SetFullscreen(true);
+        SidebarCol.Width = new GridLength(0);
         Rail.Visibility = Visibility.Collapsed;
-        CloseDrawer();
+        DrawerContent.Visibility = Visibility.Collapsed;
         preFullscreenState = WindowState;
         WindowStyle = WindowStyle.None;
         WindowState = WindowState.Maximized;
@@ -189,7 +190,9 @@ public partial class MainWindow : Window
         if (!fullscreen) return;
         fullscreen = false;
         store.SetFullscreen(false);
+        SidebarCol.Width = new GridLength(56);
         Rail.Visibility = Visibility.Visible;
+        DrawerContent.Visibility = Visibility.Collapsed;
         WindowStyle = WindowStyle.SingleBorderWindow;
         WindowState = preFullscreenState;
     }
@@ -316,9 +319,14 @@ public partial class MainWindow : Window
     {
         ErrorMsg.Text = string.IsNullOrEmpty(msg) ? Strings.ErrorGeneric : msg;
         ErrorOverlay.Visibility = Visibility.Visible;
+        currentWebView?.SetVisible(false);
     }
 
-    private void HideErrorOverlay() => ErrorOverlay.Visibility = Visibility.Collapsed;
+    private void HideErrorOverlay()
+    {
+        ErrorOverlay.Visibility = Visibility.Collapsed;
+        currentWebView?.SetVisible(true);
+    }
 
     // ---------- 账号操作 ----------
 
@@ -339,7 +347,6 @@ public partial class MainWindow : Window
         if (a == null) return;
         store.SetCurrent(id);
         RenderAccounts();
-        CloseDrawer();
         HideErrorOverlay();
 
         if (animate) ShowSplashFor(a);
@@ -527,6 +534,7 @@ public partial class MainWindow : Window
         SplashTile.Text = string.IsNullOrEmpty(a.Avatar) ? "m" : a.Avatar;
         SplashName.Text = a.Name;
         Splash.Visibility = Visibility.Visible;
+        currentWebView?.SetVisible(false);
         splashShownAt = Tick();
 
         splashLoadedTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(SplashLoadedHideMs) };
@@ -561,6 +569,10 @@ public partial class MainWindow : Window
         splashLoadedTimer?.Stop();
         splashFallbackTimer?.Stop();
         Splash.Visibility = Visibility.Collapsed;
+        if (!webErrored.GetValueOrDefault(store.GetCurrentId()))
+        {
+            currentWebView?.SetVisible(true);
+        }
     }
 
     private Border MakeRailAvatar(Account a)
@@ -827,23 +839,21 @@ public partial class MainWindow : Window
         ProbeNonAliveSoon();
     }
 
-    // ---------- 抽屉 ----------
+    // ---------- 抽屉/侧栏 ----------
 
     private void OpenDrawer()
     {
         if (fullscreen) return;
-        DrawerRoot.Visibility = Visibility.Visible;
-        var anim = new DoubleAnimation(-DrawerContent.Width, 0, TimeSpan.FromMilliseconds(160))
-        {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-        };
-        DrawerTranslate.BeginAnimation(TranslateTransform.XProperty, anim);
+        SidebarCol.Width = new GridLength(274);
+        Rail.Visibility = Visibility.Collapsed;
+        DrawerContent.Visibility = Visibility.Visible;
     }
 
     private void CloseDrawer()
     {
-        if (DrawerRoot.Visibility != Visibility.Visible) return;
-        DrawerRoot.Visibility = Visibility.Collapsed;
+        SidebarCol.Width = new GridLength(56);
+        DrawerContent.Visibility = Visibility.Collapsed;
+        Rail.Visibility = Visibility.Visible;
     }
 
     // ---------- Toast ----------
@@ -851,9 +861,7 @@ public partial class MainWindow : Window
     private void Toast(string msg)
     {
         ToastText.Text = msg;
-        ToastHost.Visibility = Visibility.Visible;
-        ToastHost.BeginAnimation(OpacityProperty, null);
-        ToastHost.Opacity = 1;
+        ToastPopup.IsOpen = true;
         toastTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
         toastTimer.Tick += ToastTimerTick;
         toastTimer.Stop();
@@ -863,9 +871,7 @@ public partial class MainWindow : Window
     private void ToastTimerTick(object? sender, EventArgs e)
     {
         toastTimer!.Stop();
-        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
-        fade.Completed += (_, _) => ToastHost.Visibility = Visibility.Collapsed;
-        ToastHost.BeginAnimation(OpacityProperty, fade);
+        ToastPopup.IsOpen = false;
     }
 
     // ---------- 事件 ----------
@@ -873,8 +879,6 @@ public partial class MainWindow : Window
     private void OnRailExpandClick(object sender, RoutedEventArgs e) => OpenDrawer();
 
     private void OnCollapseClick(object sender, RoutedEventArgs e) => CloseDrawer();
-
-    private void OnBackdropClick(object sender, MouseButtonEventArgs e) => CloseDrawer();
 
     private void OnAddAccountClick(object sender, RoutedEventArgs e) => AddAccount();
 
@@ -912,7 +916,7 @@ public partial class MainWindow : Window
                 ExitFullscreen();
                 e.Handled = true;
             }
-            else if (DrawerRoot.Visibility == Visibility.Visible)
+            else if (DrawerContent.Visibility == Visibility.Visible)
             {
                 CloseDrawer();
                 e.Handled = true;
