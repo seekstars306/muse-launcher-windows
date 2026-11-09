@@ -73,3 +73,16 @@ Windows 上也可以直接跑 `build.ps1`（测试 + 发布 + 打 zip）。
 2. **下载**：使用 WebView2 自带下载 UI（安卓走 DownloadManager）；UA 为桌面 Edge，无需安卓的去 `; wv` 处理。
 3. **内存**：LRU 常驻 4 个账号 = 4 个浏览器进程，空闲内存高于安卓。
 4. 鉴权代理：`--proxy-server` 不支持 URL 内嵌账密；测活支持账密（407 应答），但浏览代理请在 Clash 等本地工具侧处理。
+
+---
+
+## 🔗 友情链接
+
+- [LINUX DO](https://linux.do/) —— 真诚分享、友好讨论的技术社区，本项目的交流与反馈也发布于此
+
+---
+
+## 🔗 相关链接
+
+- [Muse Launcher 安卓版](https://github.com/seekstars306/muse-launcher) —— 对应的 Android WebView Profile 多账号启动器
+
