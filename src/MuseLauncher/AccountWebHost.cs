@@ -48,7 +48,7 @@ public sealed class AccountWebHost : IAsyncDisposable
     public event Action<AccountWebHost, bool, string?>? NavigationCompleted;
     public event Action<AccountWebHost>? RendererFailed;
 
-    private AccountWebHost(long accountId, string profileDirectory, WebView2 control)
+    internal AccountWebHost(long accountId, string profileDirectory, WebView2 control)
     {
         AccountId = accountId;
         this.profileDirectory = profileDirectory;
@@ -243,10 +243,151 @@ public sealed class AccountWebHost : IAsyncDisposable
     public bool CanGoBack => !disposing && Control.CoreWebView2?.CanGoBack == true;
     public void GoBack() => Core.GoBack();
 
+    /// <summary>导出整个 profile 中尚有效的 muse.ai Cookie；不导航，也不记录 Cookie 内容。</summary>
+    public async Task<List<CredentialCookie>> ExportMuseCookiesAsync()
+    {
+        try
+        {
+            var cookies = await Core.CookieManager.GetCookiesAsync(null);
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
+            return cookies
+                .Where(cookie => IsMuseCookieDomain(cookie.Domain))
+                .Select(ToCredentialCookie)
+                .Where(cookie => cookie.IsSession || cookie.ExpiresUnixSeconds > now)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            throw new InvalidDataException("Cookie 导出失败");
+        }
+    }
+
+    /// <summary>
+    /// 使用归档的同一套规则校验后写入 Cookie，并从整个 profile 回读核对；不触发导航。
+    /// 新建 Cookie 默认为 session；仅持久 Cookie 设置 Expires，保留浏览器报告的域表示。
+    /// </summary>
+    public async Task<bool> RestoreMuseCookiesAsync(IReadOnlyList<CredentialCookie> cookies)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(cookies);
+            var sources = cookies.ToList();
+            CredentialArchive.Validate(new CredentialBundle
+            {
+                Accounts = new() { new CredentialAccount { CookiesCaptured = true, Cookies = sources } },
+            });
+
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
+            sources = sources.Where(cookie => cookie.IsSession || cookie.ExpiresUnixSeconds > now).ToList();
+            if (!sources.Any(cookie => string.Equals(cookie.Name, AuthCookieName, StringComparison.Ordinal)))
+                return false;
+
+            var manager = Core.CookieManager;
+            var validated = new List<(CredentialCookie Source, CoreWebView2Cookie Cookie)>();
+            foreach (var source in sources)
+            {
+                var cookie = manager.CreateCookie(source.Name, source.Value, source.Domain, source.Path);
+                cookie.IsSecure = source.IsSecure;
+                cookie.IsHttpOnly = source.IsHttpOnly;
+                cookie.SameSite = ParseSameSite(source.SameSite);
+                if (!source.IsSession)
+                    cookie.Expires = DateTimeOffset.FromUnixTimeMilliseconds(
+                        (long)Math.Round(source.ExpiresUnixSeconds!.Value * 1000d)).UtcDateTime;
+                validated.Add((source, cookie));
+            }
+
+            foreach (var item in validated) manager.AddOrUpdateCookie(item.Cookie);
+            var stored = await manager.GetCookiesAsync(null);
+            foreach (var item in validated)
+            {
+                var actual = stored.FirstOrDefault(cookie => CookieIdentityEquals(cookie, item.Source));
+                if (actual == null)
+                {
+                    // Cookie may expire between validation and the asynchronous readback.
+                    if (!item.Source.IsSession && item.Source.ExpiresUnixSeconds
+                        <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d) continue;
+                    if (item.Source.Name == AuthCookieName) continue;
+                    throw new InvalidDataException("Cookie 恢复校验失败");
+                }
+                if (!CookieAttributesEqual(actual, item.Source))
+                    throw new InvalidDataException("Cookie 恢复校验失败");
+            }
+
+            now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
+            return sources.Where(source => source.Name == AuthCookieName)
+                .Any(source => stored.Any(cookie => CookieIdentityEquals(cookie, source)
+                    && CookieAttributesEqual(cookie, source)
+                    && (cookie.IsSession || ToCredentialCookie(cookie).ExpiresUnixSeconds > now)));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // COM and validation exceptions can contain Cookie values; never retain an inner exception.
+            throw new InvalidDataException("Cookie 恢复失败");
+        }
+    }
+
     public async Task<List<string>> GetMuseCookieNamesAsync()
     {
         var cookies = await Core.CookieManager.GetCookiesAsync("https://muse.ai/");
         return cookies.Select(c => c.Name).ToList();
+    }
+
+    private static CredentialCookie ToCredentialCookie(CoreWebView2Cookie cookie)
+    {
+        var session = cookie.IsSession;
+        double? expiry = session
+            ? null
+            : new DateTimeOffset(DateTime.SpecifyKind(cookie.Expires, DateTimeKind.Utc))
+                .ToUnixTimeMilliseconds() / 1000d;
+        return new CredentialCookie
+        {
+            Name = cookie.Name,
+            Value = cookie.Value,
+            Domain = cookie.Domain,
+            Path = cookie.Path,
+            IsSecure = cookie.IsSecure,
+            IsHttpOnly = cookie.IsHttpOnly,
+            IsSession = session,
+            SameSite = cookie.SameSite.ToString(),
+            ExpiresUnixSeconds = expiry,
+        };
+    }
+
+    private static CoreWebView2CookieSameSiteKind ParseSameSite(string sameSite)
+    {
+        if (!Enum.TryParse<CoreWebView2CookieSameSiteKind>(sameSite, ignoreCase: false, out var parsed)
+            || !Enum.IsDefined(parsed) || parsed.ToString() != sameSite)
+            throw new InvalidDataException("Cookie 数据无效");
+        return parsed;
+    }
+
+    private static bool CookieIdentityEquals(CoreWebView2Cookie actual, CredentialCookie expected)
+        => string.Equals(actual.Name, expected.Name, StringComparison.Ordinal)
+        && string.Equals(actual.Domain, expected.Domain, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(actual.Path, expected.Path, StringComparison.Ordinal);
+
+    private static bool CookieAttributesEqual(CoreWebView2Cookie actual, CredentialCookie expected)
+    {
+        var actualExpiry = actual.IsSession
+            ? (double?)null
+            : new DateTimeOffset(DateTime.SpecifyKind(actual.Expires, DateTimeKind.Utc))
+                .ToUnixTimeMilliseconds() / 1000d;
+        return actual.Value == expected.Value
+            && actual.IsSecure == expected.IsSecure
+            && actual.IsHttpOnly == expected.IsHttpOnly
+            && actual.IsSession == expected.IsSession
+            && actual.SameSite.ToString() == expected.SameSite
+            && ((actualExpiry is null && expected.ExpiresUnixSeconds is null)
+                || (actualExpiry is double actualSeconds && expected.ExpiresUnixSeconds is double expectedSeconds
+                    && Math.Abs(actualSeconds - expectedSeconds) < 0.001));
+    }
+
+    private static bool IsMuseCookieDomain(string? domain)
+    {
+        if (string.IsNullOrWhiteSpace(domain)) return false;
+        var value = domain.StartsWith('.') ? domain[1..] : domain;
+        return value.Equals("muse.ai", StringComparison.OrdinalIgnoreCase)
+            || value.EndsWith(".muse.ai", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>诊断只输出 localStorage 键和 cookie 名，不记录 cookie 值。</summary>

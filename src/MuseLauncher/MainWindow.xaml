@@ -170,6 +170,11 @@
                                Foreground="#8A9099" FontSize="12.5" TextAlignment="Center" Padding="0,18"
                                Visibility="Collapsed"/>
 
+                    <Button x:Name="BtnCredentials" DockPanel.Dock="Bottom" Content="凭证导入 / 导出"
+                            Template="{StaticResource PillTemplate}" Background="#22252C" Foreground="#E9EBEE"
+                            Margin="12,0,12,10" Padding="12,9"
+                            Click="OnCredentialsClick"/>
+
                     <!-- 添加账号卡片 -->
                     <Border x:Name="BtnAddAccount" DockPanel.Dock="Bottom" Background="#151A22"
                             CornerRadius="12" Margin="12,0,12,10" Padding="12" Cursor="Hand"
@@ -197,7 +202,7 @@
                     </DockPanel>
 
                     <!-- 账号列表（最后声明 = 填充剩余垂直空间） -->
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer x:Name="AccountScroller" VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="AccountList" Margin="10"/>
                     </ScrollViewer>
                 </DockPanel>
@@ -224,6 +229,9 @@
                            HorizontalAlignment="Center" Margin="0,6,0,0"/>
                 <Button x:Name="BtnEmptyAdd" Content="添加第一个 Muse 账号" Style="{StaticResource BluePill}"
                         Padding="30,12" HorizontalAlignment="Center" Margin="0,18,0,0" Click="OnAddAccountClick"/>
+                <Button Content="从加密文件导入账号" Template="{StaticResource PillTemplate}"
+                        Background="#22252C" Foreground="#E9EBEE" Padding="24,10"
+                        HorizontalAlignment="Center" Margin="0,12,0,0" Click="OnCredentialsClick"/>
             </StackPanel>
 
             <!-- 切换环境过渡层 -->

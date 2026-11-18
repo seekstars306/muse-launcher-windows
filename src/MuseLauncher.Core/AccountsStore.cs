@@ -112,6 +112,76 @@ public sealed class AccountsStore
         }
     }
 
+    public IReadOnlyList<Account> AppendImported(IReadOnlyList<Account> drafts, Action<IReadOnlyList<Account>>? prepare = null)
+    {
+        ArgumentNullException.ThrowIfNull(drafts);
+        lock (gate)
+        {
+            if (drafts.Count > 200) throw new ArgumentOutOfRangeException(nameof(drafts), "单次最多导入 200 个账号");
+            if (drafts.Count == 0) return Array.Empty<Account>();
+
+            var candidateNext = nextId;
+            var added = new List<Account>(drafts.Count);
+            foreach (var draft in drafts)
+            {
+                ArgumentNullException.ThrowIfNull(draft);
+                var id = candidateNext;
+                while (accounts.Any(account => account.Id == id) || isIdReserved(id))
+                {
+                    if (id == long.MaxValue) throw new InvalidOperationException("账号 ID 已耗尽");
+                    id = checked(id + 1);
+                }
+                if (id == long.MaxValue) throw new InvalidOperationException("账号 ID 已耗尽");
+                added.Add(new Account(id, draft.Name)
+                {
+                    Avatar = draft.Avatar,
+                    AvatarImage = draft.AvatarImage,
+                    Proxy = draft.Proxy,
+                    ForceProxy = draft.ForceProxy,
+                    Tags = new List<string>(draft.Tags),
+                    Logged = false,
+                });
+                candidateNext = checked(id + 1);
+            }
+
+            var candidate = accounts.Select(account => account.Clone()).ToList();
+            var candidateCurrent = accounts.Count == 0 ? added[0].Id : currentId;
+            prepare?.Invoke(added.AsReadOnly());
+            // prepare 可以保留这些草稿的引用，发布前再次深拷贝，且导入不携带登录态。
+            added = added.Select(account =>
+            {
+                var clone = account.Clone();
+                clone.Logged = false;
+                return clone;
+            }).ToList();
+            candidate.AddRange(added);
+            Persist(candidate, candidateNext, candidateCurrent);
+            return added.Select(account => account.Clone()).ToArray();
+        }
+    }
+
+    public void Move(long id, long targetId, bool after)
+    {
+        lock (gate)
+        {
+            var candidate = accounts.Select(account => account.Clone()).ToList();
+            var index = candidate.FindIndex(account => account.Id == id);
+            var targetIndex = candidate.FindIndex(account => account.Id == targetId);
+            if (index < 0) throw new ArgumentOutOfRangeException(nameof(id));
+            if (targetIndex < 0) throw new ArgumentOutOfRangeException(nameof(targetId));
+            if (id == targetId) return;
+
+            var insertionIndex = targetIndex + (after ? 1 : 0);
+            if (index < insertionIndex) insertionIndex--;
+            if (insertionIndex == index) return;
+
+            var moved = candidate[index];
+            candidate.RemoveAt(index);
+            candidate.Insert(insertionIndex, moved);
+            Persist(candidate, nextId, currentId);
+        }
+    }
+
     public void Update(Account updated)
     {
         ArgumentNullException.ThrowIfNull(updated);

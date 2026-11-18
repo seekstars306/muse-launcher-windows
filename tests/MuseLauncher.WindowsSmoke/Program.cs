@@ -14,9 +14,10 @@ internal static class Program
     private static int Main(string[] args)
     {
         var uiOnly = args.Length == 1 && args[0] == "--ui-only";
-        if (args.Length > 0 && !uiOnly)
+        var credentialsOnly = args.Length == 1 && args[0] == "--credentials-only";
+        if (args.Length > 0 && !uiOnly && !credentialsOnly)
         {
-            Console.Error.WriteLine("Usage: MuseLauncher.WindowsSmoke [--ui-only]");
+            Console.Error.WriteLine("Usage: MuseLauncher.WindowsSmoke [--ui-only | --credentials-only]");
             return 2;
         }
         if (!OperatingSystem.IsWindows())
@@ -33,7 +34,17 @@ internal static class Program
         {
             try
             {
-                if (uiOnly) await AvatarNavigationSmoke.RunAsync();
+                if (uiOnly)
+                {
+                    await AccountOrderSmoke.RunAsync();
+                    await AvatarNavigationSmoke.RunAsync();
+                }
+                else if (credentialsOnly)
+                {
+                    await CredentialsWindowSmoke.RunAsync();
+                    await CredentialCookieSmoke.RunAsync();
+                    await CredentialTransferSmoke.RunAsync();
+                }
                 else await RunAsync();
                 exitCode = 0;
             }
@@ -49,6 +60,7 @@ internal static class Program
         // 每轮新目录，绝不读取用户账号/Profile。仅使用本机合成代理，不访问 muse.ai。
         var root = Path.Combine(Path.GetTempPath(), "MuseLauncherSmoke-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        Log.ConfigureDirectoryForTests(Path.Combine(root, "log"));
         await using var upstreamA = new MockHttpProxy("alpha", "alice:first");
         await using var upstreamB = new MockHttpProxy("beta", "bob:second");
         var window = new MainWindow(Path.Combine(root, "Metadata"), Path.Combine(root, "Profiles"),

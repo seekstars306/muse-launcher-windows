@@ -11,11 +11,22 @@
 - 升级前退出旧版，并备份 `%APPDATA%\MuseLauncher` 和 `%LOCALAPPDATA%\MuseLauncher`。
 - 解压 Windows x64 自包含包，运行 `MuseLauncher.exe`；不需要单独安装 .NET，仍需要 Microsoft [WebView2 Evergreen Runtime](https://go.microsoft.com/fwlink/p/?LinkId=2124703)。
 - 添加账号后在 muse.ai 页面登录。服务端可能使会话失效，本程序不保证账号永不掉登录。
-- 左侧头像条和展开账号列表可切换账号；展开列表与网页左右并列，不覆盖 WebView2 原生窗口。
+- 左侧头像条和展开账号列表可切换账号；展开列表与网页左右并列，不覆盖 WebView2 原生窗口。展开后按住头像或账号名称上下拖动，可调整顺序；顺序自动保存，窄头像栏和导出文件同步采用该顺序。
 - 设置可修改名称、头像、标签及代理；头像支持 PNG/JPG/BMP/GIF 图片，保存采用草稿，失败时不污染正在使用的配置。
 - 搜索按名称和标签过滤。`F11` 切换全屏；`Esc` 收起列表或退出全屏；展开列表可完全隐藏，鼠标移入窗口左边缘或按 `Ctrl+Shift+B` 恢复。
 - 默认最多保留 4 个浏览器会话。淘汰会真实销毁控件和代理隧道，但保留账号目录，切回时重新加载。
 - 删除账号会先等待其浏览器释放、保存列表，再删除对应目录；目录被占用时明确提示并保留，不会悄悄拿给新账号。
+
+## 加密凭证导入 / 导出
+
+展开账号栏，点击“凭证导入 / 导出”，或在空账号界面选择“从加密文件导入账号”。导出全部账号时设置至少 8 个字符的密码，生成 `.musecred` 文件；导入时输入同一密码。
+
+- 包含名称、文字/图片头像、标签、完整代理配置（包括代理用户名和密码），以及 `muse.ai` 及其子域的 Cookie。
+- 导入始终追加新账号并分配新 ID，同名也不覆盖本机账号和当前选择。恢复失败的登录态明确提示重新登录，账号资料和代理仍会保留。
+- 文件使用 PBKDF2-HMAC-SHA256（600,000 次迭代）和 AES-256-GCM 认证加密。密码不保存，忘记后无法找回；文件与密码应分开保管。错误密码或篡改文件不会进行部分导入。
+- 不导出其他网站 Cookie、浏览器保存的密码、缓存、localStorage、IndexedDB 或完整 WebView2 目录。Cookie 已过期、服务端撤销或要求新设备验证时，仍需重新登录，不保证跨电脑免登录。
+- 会话型 Cookie 会先用当前 Windows 用户的 DPAPI 保护，等待新账号首次打开时恢复；这个待恢复文件不用于跨电脑共享。跨电脑请使用 `.musecred` 加密文件。
+- 本地 `accounts.json` 中已有的代理密码仍是明文，导出加密不改变本地存储方式。
 
 ## 每账号不同代理
 
@@ -100,7 +111,7 @@ dotnet build MuseLauncher.sln -c Release
 dotnet run --project tests/MuseLauncher.WindowsSmoke -c Release
 ```
 
-入口只使用新临时目录、合成账号和本机模拟 HTTP 代理，不访问 muse.ai，也不使用真实代理密码。验证真实 WebView2 账号存储隔离、5 账号 LRU 控件释放、同网关换账密重建、创建失败与重试。仅验证界面布局、头像和配置保存时，可运行 `dotnet run --project tests/MuseLauncher.WindowsSmoke -c Release -- --ui-only`；该模式不创建 WebView。Windows 维护者运行记录见 [REPAIR-TEST-REPORT.md](REPAIR-TEST-REPORT.md)。
+入口只使用新临时目录、合成账号和本机模拟 HTTP 代理，不访问 muse.ai，也不使用真实代理密码。验证真实 WebView2 账号存储隔离、5 账号 LRU 控件释放、同网关换账密重建、创建失败与重试。仅验证界面布局、头像和配置保存时，可运行 `dotnet run --project tests/MuseLauncher.WindowsSmoke -c Release -- --ui-only`；该模式不创建 WebView。凭证迁移的真实 WebView2 隔离验证可运行 `dotnet run --project tests/MuseLauncher.WindowsSmoke -c Release -- --credentials-only`，仅使用临时目录和合成 Cookie，不访问 Muse。Windows 维护者运行记录见 [REPAIR-TEST-REPORT.md](REPAIR-TEST-REPORT.md)。
 
 ### 本地构建包
 

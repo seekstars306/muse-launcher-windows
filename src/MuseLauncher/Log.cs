@@ -15,24 +15,43 @@ public static class Log
     {
         get
         {
-            if (path == null)
+            lock (Gate)
             {
-                var dir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "MuseLauncher");
-                Directory.CreateDirectory(dir);
-                path = Path.Combine(dir, "log.txt");
-                try
+                if (path == null)
                 {
-                    var fi = new FileInfo(path);
-                    if (fi.Exists && fi.Length > 5 * 1024 * 1024) fi.Delete();
+                    var dir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "MuseLauncher");
+                    Directory.CreateDirectory(dir);
+                    path = Path.Combine(dir, "log.txt");
+                    try
+                    {
+                        var fi = new FileInfo(path);
+                        if (fi.Exists && fi.Length > 5 * 1024 * 1024) fi.Delete();
+                    }
+                    catch
+                    {
+                        // 截断失败不影响使用
+                    }
                 }
-                catch
-                {
-                    // 截断失败不影响使用
-                }
+                return path;
             }
-            return path;
+        }
+    }
+
+    /// <summary>测试必须在创建任何浏览器或窗口前调用；仅接受临时目录的子目录，不探测正式日志。</summary>
+    internal static void ConfigureDirectoryForTests(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        lock (Gate)
+        {
+            var target = Path.GetFullPath(directory);
+            var relative = Path.GetRelativePath(Path.GetFullPath(Path.GetTempPath()), target);
+            if (relative is "." or ".." || Path.IsPathRooted(relative)
+                || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                throw new ArgumentException("测试日志目录必须位于临时目录内", nameof(directory));
+            Directory.CreateDirectory(target);
+            path = Path.Combine(target, "log.txt");
         }
     }
 

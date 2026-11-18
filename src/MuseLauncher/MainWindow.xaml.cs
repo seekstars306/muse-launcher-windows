@@ -95,7 +95,7 @@ public partial class MainWindow : Window
     public async void HandleLaunchCommands(string[] args)
     {
 #if DEBUG
-        if (closing) return;
+        if (closing || credentialTransferBusy) return;
         try
         {
             var command = LaunchCommands.Parse(args);
@@ -197,10 +197,33 @@ public partial class MainWindow : Window
     {
         var host = await AccountWebHost.CreateAsync(id, configuration,
             control => WebContainer.Children.Add(control), cancellationToken);
-        host.NavigationStarting += OnNavigationStarting;
-        host.NavigationCompleted += OnNavigationCompleted;
-        host.RendererFailed += OnRendererFailed;
-        return host;
+        try
+        {
+            if (PendingCredentials.Exists(configuration.ProfileDirectory!))
+            {
+                try
+                {
+                    var imported = PendingCredentials.Read(configuration.ProfileDirectory!);
+                    var restored = await host.RestoreMuseCookiesAsync(imported.Cookies);
+                    if (!restored) Toast("导入账号的登录 Cookie 已失效，请重新登录");
+                }
+                catch (Exception)
+                {
+                    Toast("导入账号的登录态未能恢复，请重新登录");
+                }
+            }
+            // 被取消的 host 会销毁；保留 pending，供下次激活恢复 session Cookie。
+            cancellationToken.ThrowIfCancellationRequested();
+            host.NavigationStarting += OnNavigationStarting;
+            host.NavigationCompleted += OnNavigationCompleted;
+            host.RendererFailed += OnRendererFailed;
+            return host;
+        }
+        catch
+        {
+            await host.DisposeAsync();
+            throw;
+        }
     }
 
     private void RefreshVisibleState()
@@ -208,7 +231,7 @@ public partial class MainWindow : Window
         var current = sessions.Current;
         foreach (var entry in sessions.Snapshot())
         {
-            var show = viewState.CanShowWebView && viewState.AccountId == entry.Key
+            var show = !credentialTransferBusy && viewState.CanShowWebView && viewState.AccountId == entry.Key
                 && ReferenceEquals(current, entry.Value) && sessions.IsCurrent(entry.Key, entry.Value);
             entry.Value.SetVisible(show);
         }
@@ -226,7 +249,7 @@ public partial class MainWindow : Window
 
     private void OnNavigationCompleted(AccountWebHost host, bool success, string? error)
     {
-        if (!sessions.IsRegistered(host.AccountId, host) || closing) return;
+        if (!sessions.IsRegistered(host.AccountId, host) || closing || credentialTransferBusy) return;
         if (success) recoveryAttempts.Remove(host.AccountId);
         if (sessions.IsCurrent(host.AccountId, host))
         {
@@ -242,6 +265,11 @@ public partial class MainWindow : Window
     private async void OnRendererFailed(AccountWebHost host)
     {
         if (closing || !sessions.IsRegistered(host.AccountId, host)) return;
+        if (credentialTransferBusy)
+        {
+            credentialTransferFailures.Add(host);
+            return;
+        }
         var wasCurrent = sessions.IsCurrent(host.AccountId, host);
         var version = viewState.Version;
         try
@@ -272,7 +300,7 @@ public partial class MainWindow : Window
 
     private async Task SwitchTo(long id, bool animate, bool reload = false)
     {
-        if (closing || changingAccounts.Contains(id)) return;
+        if (closing || credentialTransferBusy || changingAccounts.Contains(id)) return;
         var account = store.FindById(id);
         if (account == null) return;
         try { store.SetCurrent(id); }
@@ -294,10 +322,18 @@ public partial class MainWindow : Window
             timeout.CancelAfter(TimeSpan.FromSeconds(45));
             var host = await sessions.ActivateAsync(id,
                 new BrowserSessionConfiguration(account.Proxy, account.ForceProxy, ProfilePath(id)), timeout.Token);
-            if (!viewState.Matches(id, version) || closing) return;
+            if (!viewState.Matches(id, version) || closing || credentialTransferBusy) return;
             if (host == null)
             {
                 viewState.SetError(id, version, "环境创建已取消或超时，请重试");
+                RefreshVisibleState();
+                return;
+            }
+            // 只有协调器确认激活成功后才消费 pending；删除失败时禁止导航，避免重放旧凭证。
+            try { PendingCredentials.Delete(ProfilePath(id)); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                viewState.SetError(id, version, "待恢复凭证文件无法清理，请检查账号目录权限后重试");
                 RefreshVisibleState();
                 return;
             }
@@ -339,7 +375,7 @@ public partial class MainWindow : Window
 
     private async Task AddAccountAsync()
     {
-        if (closing) return;
+        if (closing || credentialTransferBusy) return;
         try
         {
             var previous = store.FindById(store.GetCurrentId());
@@ -353,6 +389,7 @@ public partial class MainWindow : Window
 
     private void CommitRename(long id, TextBox input)
     {
+        if (credentialTransferBusy) return;
         var name = input.Text.Trim();
         editId = -1;
         if (string.IsNullOrEmpty(name)) { RenderAccounts(); return; }
@@ -371,7 +408,7 @@ public partial class MainWindow : Window
 
     private async Task DeleteAccountAsync(long id)
     {
-        if (closing || store.FindById(id) == null || !changingAccounts.Add(id)) return;
+        if (closing || credentialTransferBusy || store.FindById(id) == null || !changingAccounts.Add(id)) return;
         try
         {
             if (viewState.AccountId == id)
@@ -434,7 +471,7 @@ public partial class MainWindow : Window
 
     private async void ProbeNonAliveSoon()
     {
-        if (closing || sessions == null) return;
+        if (closing || credentialTransferBusy || sessions == null) return;
         if (probingDisk) { probeDiskDirty = true; return; }
         probingDisk = true;
         try
@@ -445,7 +482,7 @@ public partial class MainWindow : Window
                 var hosts = sessions.Snapshot();
                 foreach (var account in store.All())
                 {
-                    if (closing) return;
+                    if (closing || credentialTransferBusy) return;
                     if (hosts.TryGetValue(account.Id, out var host)) { await ProbeAliveAsync(host); continue; }
                     var names = await Task.Run(() => CookieProbe.ProbeCookieNamesOnDisk(ProfilePath(account.Id)));
                     if (!sessions.Snapshot().ContainsKey(account.Id))
@@ -461,6 +498,7 @@ public partial class MainWindow : Window
     {
         if (closed) return;
         e.Cancel = true;
+        if (credentialTransferBusy) return;
         if (closing) return;
         closing = true;
         lifetime.Cancel();
@@ -493,7 +531,7 @@ public partial class MainWindow : Window
 
     private void RenderAccounts()
     {
-        if (store == null || closing) return;
+        if (store == null || closing || draggingAccountId != null) return;
         RailAvatars.Children.Clear();
         AccountList.Children.Clear();
         var query = SearchInput.Text.Trim();
@@ -602,8 +640,16 @@ public partial class MainWindow : Window
         status.Inlines.Add(account.Logged ? Strings.StatusLogged : Strings.StatusNotLogged);
         info.Children.Add(status);
         dock.Children.Add(info);
+        AttachAccountOrderHandlers(row, account);
         row.MouseLeftButtonUp += async (_, e) =>
         {
+            accountDragStart = null;
+            if (suppressAccountClick)
+            {
+                suppressAccountClick = false;
+                e.Handled = true;
+                return;
+            }
             if (IsButtonSource(e.OriginalSource as DependencyObject)) return;
             e.Handled = true;
             await SwitchTo(account.Id, animate: true);
@@ -711,7 +757,7 @@ public partial class MainWindow : Window
 
     private async Task OpenConfigAsync(long id)
     {
-        if (closing || changingAccounts.Contains(id)) return;
+        if (closing || credentialTransferBusy || changingAccounts.Contains(id)) return;
         var account = store.FindById(id);
         if (account == null) return;
         try
@@ -727,7 +773,7 @@ public partial class MainWindow : Window
 
     internal async Task ApplySavedConfigurationAsync(long id)
     {
-        if (!changingAccounts.Add(id)) return;
+        if (credentialTransferBusy || !changingAccounts.Add(id)) return;
         var wasCurrent = store.GetCurrentId() == id;
         if (wasCurrent) { transition?.Cancel(); viewState.Clear(); RefreshVisibleState(); }
         try { await sessions.InvalidateAsync(id); }
