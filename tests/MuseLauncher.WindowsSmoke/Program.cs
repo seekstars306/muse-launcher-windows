@@ -11,11 +11,19 @@ namespace MuseLauncher.WindowsSmoke;
 internal static class Program
 {
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
+        var uiOnly = args.Length == 1 && args[0] == "--ui-only";
+        if (args.Length > 0 && !uiOnly)
+        {
+            Console.Error.WriteLine("Usage: MuseLauncher.WindowsSmoke [--ui-only]");
+            return 2;
+        }
         if (!OperatingSystem.IsWindows())
         {
-            Console.WriteLine("SKIPPED: 此入口需要 Windows 和 WebView2 Evergreen Runtime。");
+            Console.WriteLine(uiOnly
+                ? "SKIPPED: --ui-only 需要 Windows/WPF，不需要 WebView2 Runtime。"
+                : "SKIPPED: 此入口需要 Windows 和 WebView2 Evergreen Runtime。");
             return 2;
         }
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -23,7 +31,12 @@ internal static class Program
         var result = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         application.Startup += async (_, _) =>
         {
-            try { await RunAsync(); exitCode = 0; }
+            try
+            {
+                if (uiOnly) await AvatarNavigationSmoke.RunAsync();
+                else await RunAsync();
+                exitCode = 0;
+            }
             catch (Exception ex) { Console.Error.WriteLine("FAIL: " + ex); }
             finally { result.TrySetResult(exitCode); application.Shutdown(exitCode); }
         };

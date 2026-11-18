@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MuseLauncher.Core;
 
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
     private readonly HashSet<long> changingAccounts = new();
     private readonly Dictionary<long, int> recoveryAttempts = new();
     private readonly string profilesRoot;
+    private readonly string avatarDirectory;
     private readonly string startUrl;
     private readonly DispatcherTimer toastTimer;
     private CancellationTokenSource? transition;
@@ -36,6 +38,9 @@ public partial class MainWindow : Window
     private bool probeDiskDirty;
     private bool closing;
     private bool closed;
+    private bool drawerManuallyExpanded;
+    private bool sidebarHidden;
+    private bool drawerAutoCollapsed;
     private TextBox? renameInput;
 
     public MainWindow() : this(null, null, AccountWebHost.StartUrl) { }
@@ -47,6 +52,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         var appDir = dataDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MuseLauncher");
+        avatarDirectory = Path.Combine(appDir, "Avatars");
         store = new AccountsStore(new FileKeyValueStore(Path.Combine(appDir, "accounts.json")),
             id => Directory.Exists(ProfilePath(id)));
         sessions = new SessionCoordinator<AccountWebHost, BrowserSessionConfiguration>(MaxAliveWebviews,
@@ -140,9 +146,6 @@ public partial class MainWindow : Window
     private void ApplyFullscreen(bool value)
     {
         fullscreen = value;
-        SidebarCol.Width = new GridLength(value ? 0 : 56);
-        Rail.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
-        DrawerContent.Visibility = Visibility.Collapsed;
         if (value)
         {
             preFullscreenState = WindowState;
@@ -153,6 +156,39 @@ public partial class MainWindow : Window
         {
             WindowStyle = WindowStyle.SingleBorderWindow;
             WindowState = preFullscreenState;
+        }
+        UpdateSidebarLayout();
+    }
+
+    private void UpdateSidebarLayout()
+    {
+        if (fullscreen)
+        {
+            SidebarCol.Width = new GridLength(0);
+            Rail.Visibility = Visibility.Collapsed;
+            DrawerContent.Visibility = Visibility.Collapsed;
+            SidebarEdgeTrigger.Visibility = Visibility.Collapsed;
+        }
+        else if (sidebarHidden)
+        {
+            SidebarCol.Width = new GridLength(4);
+            Rail.Visibility = Visibility.Collapsed;
+            DrawerContent.Visibility = Visibility.Collapsed;
+            SidebarEdgeTrigger.Visibility = Visibility.Visible;
+        }
+        else if (drawerManuallyExpanded && !drawerAutoCollapsed)
+        {
+            SidebarCol.Width = new GridLength(274);
+            Rail.Visibility = Visibility.Collapsed;
+            DrawerContent.Visibility = Visibility.Visible;
+            SidebarEdgeTrigger.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            SidebarCol.Width = new GridLength(56);
+            Rail.Visibility = Visibility.Visible;
+            DrawerContent.Visibility = Visibility.Collapsed;
+            SidebarEdgeTrigger.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -439,7 +475,12 @@ public partial class MainWindow : Window
             Log.I("MuseWebview", "close failed: " + ex.GetType().Name);
             MessageBox.Show("部分浏览器未在超时内退出，账号目录未删除。下次启动会检查目录占用。", Strings.AppName);
         }
-        finally { closed = true; Close(); }
+        finally
+        {
+            closed = true;
+            // 空会话可能同步完成清理；等当前 Closing 事件返回后再关闭。
+            _ = Dispatcher.BeginInvoke(new Action(Close));
+        }
     }
 
     private void ReportOperationFailure(string operation, Exception exception)
@@ -476,29 +517,37 @@ public partial class MainWindow : Window
 
     private FrameworkElement MakeRailAvatar(Account account)
     {
-        var grid = new Grid { Width = 40, Height = 40, Margin = new Thickness(0, 4, 0, 4), Cursor = Cursors.Hand };
+        var selected = account.Id == store.GetCurrentId();
+        var grid = new Grid { Width = 44, Height = 44, Margin = new Thickness(0, 4, 0, 4), Cursor = Cursors.Hand };
         grid.Children.Add(new Border
         {
-            Background = account.Id == store.GetCurrentId() ? RowBrush(true) : Brushes.Transparent,
-            CornerRadius = new CornerRadius(20), Child = MakeTile(38, 20, account.Avatar),
+            Background = selected ? RowBrush(true) : Brushes.Transparent,
+            BorderBrush = selected ? AccentBrush : Brushes.Transparent,
+            BorderThickness = new Thickness(selected ? 2 : 0),
+            CornerRadius = new CornerRadius(14), Child = MakeTile(38, 20, LimitText(account.Avatar, 1), account.AvatarImage),
         });
         grid.Children.Add(new Border
         {
             Width = 10, Height = 10, CornerRadius = new CornerRadius(5),
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
-            Background = StatusBrush(account.Logged),
+            Background = StatusBrush(account.Logged), BorderBrush = BrushFromRgb(0x0F, 0x11, 0x14), BorderThickness = new Thickness(1),
         });
         grid.MouseLeftButtonUp += async (_, e) => { e.Handled = true; await SwitchTo(account.Id, animate: true); };
+        grid.ContextMenu = MakeAccountContextMenu(account);
         return grid;
     }
 
     private FrameworkElement MakeDrawerRow(Account account)
     {
+        var selected = account.Id == store.GetCurrentId();
         var row = new Border
         {
-            Background = RowBrush(account.Id == store.GetCurrentId()), CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(10, 9, 10, 9), Margin = new Thickness(0, 0, 0, 4), Cursor = Cursors.Hand,
+            Background = RowBrush(selected), CornerRadius = new CornerRadius(10),
+            BorderBrush = selected ? AccentBrush : Brushes.Transparent,
+            BorderThickness = new Thickness(selected ? 1.5 : 1),
+            Padding = new Thickness(9, 8, 9, 8), Margin = new Thickness(0, 0, 0, 4), Cursor = Cursors.Hand,
         };
+        row.ContextMenu = MakeAccountContextMenu(account);
         var dock = new DockPanel { LastChildFill = true };
         row.Child = dock;
         if (confirmDelId == account.Id)
@@ -519,7 +568,7 @@ public partial class MainWindow : Window
             {
                 if (renameInput != null) CommitRename(account.Id, renameInput);
             }));
-            dock.Children.Add(MakeTile(40, 20, account.Avatar));
+            dock.Children.Add(MakeTile(40, 20, account.Avatar, account.AvatarImage));
             var input = new TextBox
             {
                 Text = account.Name, Foreground = ForegroundBrush, FontSize = 13.5,
@@ -540,7 +589,7 @@ public partial class MainWindow : Window
         dock.Children.Add(MakeIconBtn("\uE74D", Strings.CdDelete, () => { confirmDelId = account.Id; editId = -1; RenderAccounts(); }));
         dock.Children.Add(MakeIconBtn("\uE70F", Strings.CdRename, () => { editId = account.Id; confirmDelId = -1; RenderAccounts(); }));
         dock.Children.Add(MakeIconBtn("\uE713", Strings.CdConfig, () => _ = OpenConfigAsync(account.Id)));
-        dock.Children.Add(MakeTile(40, 20, account.Avatar));
+        dock.Children.Add(MakeTile(40, 20, account.Avatar, account.AvatarImage));
         var info = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
         info.Children.Add(new TextBlock
         {
@@ -562,6 +611,21 @@ public partial class MainWindow : Window
         return row;
     }
 
+    private ContextMenu MakeAccountContextMenu(Account account)
+    {
+        var menu = new ContextMenu();
+        var delete = new MenuItem { Header = string.Format(Strings.ContextDeleteFmt, account.Name) };
+        delete.Click += async (_, _) =>
+        {
+            var result = MessageBox.Show(
+                string.Format(Strings.ConfirmDeleteFmt, account.Name), Strings.ConfirmDeleteTitle,
+                MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            if (result == MessageBoxResult.Yes) await DeleteAccountAsync(account.Id);
+        };
+        menu.Items.Add(delete);
+        return menu;
+    }
+
     private static bool IsButtonSource(DependencyObject? source)
     {
         while (source != null)
@@ -574,23 +638,50 @@ public partial class MainWindow : Window
 
     private static readonly Brush ForegroundBrush = new SolidColorBrush(Color.FromRgb(0xE9, 0xEB, 0xEE));
     private static readonly Brush MutedBrush = new SolidColorBrush(Color.FromRgb(0x8A, 0x90, 0x99));
+    private static readonly Brush AccentBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x7F, 0xFF));
+    private static Brush BrushFromRgb(byte red, byte green, byte blue) => new SolidColorBrush(Color.FromRgb(red, green, blue));
     private static Brush RowBrush(bool active) => new SolidColorBrush(active
         ? Color.FromRgb(0x1B, 0x27, 0x40) : Color.FromRgb(0x15, 0x17, 0x1C));
     private static Brush StatusBrush(bool logged) => new SolidColorBrush(logged
         ? Color.FromRgb(0x34, 0xC7, 0x59) : Color.FromRgb(0x4A, 0x4F, 0x57));
 
-    private static Border MakeTile(double size, double fontSize, string? text) => new()
+    private static Border MakeTile(double size, double fontSize, string? text, string? imagePath = null)
     {
-        Width = size, Height = size, CornerRadius = new CornerRadius(size * 0.28),
-        Background = new SolidColorBrush(Color.FromRgb(0x15, 0x1C, 0x28)),
-        Child = new TextBlock
+        var border = new Border
         {
-            Text = string.IsNullOrEmpty(text) ? "m" : text, FontFamily = new FontFamily("Georgia"),
+            Width = size, Height = size, CornerRadius = new CornerRadius(size * 0.28),
+            Background = new SolidColorBrush(Color.FromRgb(0x15, 0x1C, 0x28)),
+        };
+        if (!string.IsNullOrWhiteSpace(imagePath) && File.Exists(imagePath))
+        {
+            try
+            {
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.DecodePixelWidth = 128;
+                using var stream = File.OpenRead(imagePath);
+                image.StreamSource = stream;
+                image.EndInit();
+                image.Freeze();
+                border.Child = new Image { Source = image, Stretch = Stretch.UniformToFill };
+                return border;
+            }
+            catch (Exception ex) when (ex is IOException or FileFormatException or UnauthorizedAccessException or NotSupportedException
+                or InvalidOperationException or ArgumentException or FormatException or OutOfMemoryException)
+            {
+                // 文件被删除或不是受支持的图片时回退到文字头像。
+            }
+        }
+        border.Child = new TextBlock
+        {
+            Text = string.IsNullOrEmpty(text) ? "m" : LimitText(text, 2), FontFamily = new FontFamily("Georgia"),
             FontWeight = FontWeights.Bold, FontStyle = FontStyles.Italic, FontSize = fontSize,
             Foreground = Brushes.DodgerBlue, HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, size * 0.1),
-        },
-    };
+        };
+        return border;
+    }
 
     private Button MakeIconBtn(string glyph, string tooltip, Action onClick)
     {
@@ -625,7 +716,7 @@ public partial class MainWindow : Window
         if (account == null) return;
         try
         {
-            var window = new AccountConfigWindow(account, updated => store.Update(updated)) { Owner = this };
+            var window = new AccountConfigWindow(account, updated => store.Update(updated), avatarDirectory) { Owner = this };
             window.ShowDialog();
             RenderAccounts();
             if (!window.Saved || !window.ProxyChanged) return;
@@ -644,20 +735,41 @@ public partial class MainWindow : Window
         if (wasCurrent && !closing && store.GetCurrentId() == id) await SwitchTo(id, animate: true);
     }
 
-    private void OpenDrawer()
+    private void OpenDrawer(bool manual = true)
     {
         if (fullscreen || closing) return;
-        SidebarCol.Width = new GridLength(274);
-        Rail.Visibility = Visibility.Collapsed;
-        DrawerContent.Visibility = Visibility.Visible;
+        sidebarHidden = false;
+        drawerAutoCollapsed = false;
+        if (manual) drawerManuallyExpanded = true;
+        UpdateSidebarLayout();
     }
 
-    private void CloseDrawer()
+    private void CloseDrawer(bool manual = true)
     {
-        if (fullscreen) return;
-        SidebarCol.Width = new GridLength(56);
-        DrawerContent.Visibility = Visibility.Collapsed;
-        Rail.Visibility = Visibility.Visible;
+        if (fullscreen || sidebarHidden) return;
+        if (manual) drawerManuallyExpanded = false;
+        drawerAutoCollapsed = !manual;
+        UpdateSidebarLayout();
+    }
+
+    private void HideSidebar()
+    {
+        if (fullscreen || closing) return;
+        sidebarHidden = true;
+        drawerManuallyExpanded = false;
+        UpdateSidebarLayout();
+    }
+
+    private void OnSidebarEdgeMouseEnter(object sender, MouseEventArgs e) => OpenDrawer();
+
+    private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.WidthChanged || fullscreen || closing || sidebarHidden) return;
+        if (ActualWidth < 980 && drawerManuallyExpanded)
+            drawerAutoCollapsed = true;
+        else if (ActualWidth >= 1120)
+            drawerAutoCollapsed = false;
+        UpdateSidebarLayout();
     }
 
     private void Toast(string message)
@@ -671,6 +783,7 @@ public partial class MainWindow : Window
 
     private void OnRailExpandClick(object sender, RoutedEventArgs e) => OpenDrawer();
     private void OnCollapseClick(object sender, RoutedEventArgs e) => CloseDrawer();
+    private void OnHideSidebarClick(object sender, RoutedEventArgs e) => HideSidebar();
     private async void OnAddAccountClick(object sender, RoutedEventArgs e) => await AddAccountAsync();
     private void OnFullscreenClick(object sender, RoutedEventArgs e) => SetFullscreen(!fullscreen);
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e) => RenderAccounts();
@@ -684,7 +797,13 @@ public partial class MainWindow : Window
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key == Key.F11) { SetFullscreen(!fullscreen); e.Handled = true; }
+        if (key == Key.B && e.KeyboardDevice.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && !fullscreen)
+        {
+            if (sidebarHidden) OpenDrawer();
+            else HideSidebar();
+            e.Handled = true;
+        }
+        else if (key == Key.F11) { SetFullscreen(!fullscreen); e.Handled = true; }
         else if (key == Key.Escape)
         {
             if (editId > 0) { editId = -1; RenderAccounts(); e.Handled = true; }

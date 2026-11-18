@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
 using System.Net;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using System.Net.Http;
 using System.Windows;
 using MuseLauncher.Core;
@@ -15,18 +18,25 @@ public partial class AccountConfigWindow : Window
     private readonly Account original;
     private readonly Action<Account> save;
     private readonly CancellationTokenSource lifetime = new();
+    private readonly long accountId;
+    private readonly string avatarDirectory;
     private bool testing;
     private bool detecting;
+    private string avatarImagePath = "";
 
     public bool Saved { get; private set; }
     public bool ProxyChanged { get; private set; }
 
-    public AccountConfigWindow(Account account, Action<Account> save)
+    public AccountConfigWindow(Account account, Action<Account> save, string? avatarDirectory = null)
     {
         original = account.Clone();
+        accountId = account.Id;
+        this.avatarDirectory = Path.GetFullPath(avatarDirectory ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MuseLauncher", "Avatars"));
         this.save = save;
         InitializeComponent();
         AvatarInput.Text = account.Avatar;
+        LoadAvatarImage(account.AvatarImage);
         NameInput.Text = account.Name;
         ProxyInput.Text = account.Proxy;
         ForceProxyCheck.IsChecked = account.ForceProxy;
@@ -44,6 +54,35 @@ public partial class AccountConfigWindow : Window
         return string.Concat(elements);
     }
 
+    private void LoadAvatarImage(string path)
+    {
+        avatarImagePath = path;
+        AvatarImagePreview.Source = null;
+        if (avatarImagePath.Length > 0)
+        {
+            try
+            {
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.DecodePixelWidth = 128;
+                using var stream = File.OpenRead(avatarImagePath);
+                image.StreamSource = stream;
+                image.EndInit();
+                image.Freeze();
+                AvatarImagePreview.Source = image;
+            }
+            catch (Exception ex) when (ex is IOException or FileFormatException or UnauthorizedAccessException or NotSupportedException
+                or InvalidOperationException or ArgumentException or FormatException or OutOfMemoryException)
+            {
+                // 暂时不可读时保留路径，避免仅编辑名称就清掉原头像配置。
+            }
+        }
+        AvatarImagePreview.Visibility = AvatarImagePreview.Source == null
+            ? Visibility.Collapsed : Visibility.Visible;
+        TileText.Visibility = AvatarImagePreview.Source == null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void UpdateTile()
     {
         if (TileText == null) return;
@@ -53,8 +92,71 @@ public partial class AccountConfigWindow : Window
 
     private void OnAvatarChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => UpdateTile();
 
+    private void OnChooseAvatarClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择账号头像",
+            Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件|*.*",
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (dialog.ShowDialog(this) == true)
+        {
+            try
+            {
+                var extension = Path.GetExtension(dialog.FileName).ToLowerInvariant();
+                if (extension is not (".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif"))
+                    throw new InvalidDataException("请选择 PNG、JPG、BMP 或 GIF 图片");
+                if (new FileInfo(dialog.FileName).Length > 5 * 1024 * 1024)
+                    throw new InvalidDataException("头像文件不能超过 5 MB");
+                var previous = avatarImagePath;
+                LoadAvatarImage(dialog.FileName);
+                if (AvatarImagePreview.Source == null)
+                {
+                    LoadAvatarImage(previous);
+                    TestStatus.Text = "无法读取头像图片：文件损坏或格式不受支持";
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                TestStatus.Text = "无法读取头像图片：" + ex.Message;
+            }
+        }
+    }
+
+    private void OnResetAvatarClick(object sender, RoutedEventArgs e)
+    {
+        AvatarInput.Text = "m";
+        LoadAvatarImage("");
+    }
+
+    private string StoreAvatarImage(out string? createdPath)
+    {
+        createdPath = null;
+        if (avatarImagePath.Length == 0) return "";
+        if (avatarImagePath == original.AvatarImage) return original.AvatarImage;
+        var source = Path.GetFullPath(avatarImagePath);
+        var extension = Path.GetExtension(source).ToLowerInvariant();
+        if (extension is not (".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif"))
+            throw new InvalidDataException("请选择 PNG、JPG、BMP 或 GIF 图片");
+        var info = new FileInfo(source);
+        if (!info.Exists || info.Length > 5 * 1024 * 1024)
+            throw new InvalidDataException("头像文件不存在或超过 5 MB");
+        var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
+        Directory.CreateDirectory(avatarDirectory);
+        var destination = Path.Combine(avatarDirectory, accountId + "-" + hash + extension);
+        if (!File.Exists(destination))
+        {
+            File.Copy(source, destination);
+            createdPath = destination;
+        }
+        return destination;
+    }
+
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
+        string? createdAvatar = null;
         try
         {
             var draft = original.Clone();
@@ -72,14 +174,28 @@ public partial class AccountConfigWindow : Window
 
             // 账密与用户名中的 country/session 同样属于生效配置，不能只比较网关地址。
             ProxyChanged = draft.Proxy != original.Proxy || draft.ForceProxy != original.ForceProxy;
+            draft.AvatarImage = StoreAvatarImage(out createdAvatar);
             save(draft);
             Saved = true;
+            // 旧头像仍可能被账号备份引用，保留以支持恢复。
+            createdAvatar = null;
             DialogResult = true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException
-            or InvalidOperationException or ArgumentException)
+            or InvalidOperationException or ArgumentException or InvalidDataException)
         {
             TestStatus.Text = "未保存：" + ex.Message;
+        }
+        finally
+        {
+            if (createdAvatar != null)
+            {
+                try { File.Delete(createdAvatar); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    TestStatus.Text += "（未使用的头像文件暂时无法清理）";
+                }
+            }
         }
     }
 

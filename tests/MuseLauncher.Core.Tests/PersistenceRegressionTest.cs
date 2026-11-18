@@ -23,6 +23,71 @@ public sealed class PersistenceRegressionTest
     }
 
     [Fact]
+    public void AvatarImage_Clone_PreservesPathWithoutSharingMutableState()
+    {
+        var account = new Account(7, "synthetic") { AvatarImage = "synthetic/original.png" };
+        account.Tags.Add("original");
+        var clone = account.Clone();
+
+        Assert.NotSame(account, clone);
+        Assert.Equal(account.AvatarImage, clone.AvatarImage);
+        clone.AvatarImage = "synthetic/changed.png";
+        clone.Tags.Add("draft");
+        Assert.Equal("synthetic/original.png", account.AvatarImage);
+        Assert.Equal(new[] { "original" }, account.Tags);
+    }
+
+    [Theory]
+    [InlineData("synthetic/replacement.png")]
+    [InlineData("")]
+    public void AvatarImage_SuccessfulUpdate_PersistsAndIsolatesSnapshots(string path)
+    {
+        var kv = new FailingKv();
+        var store = new AccountsStore(kv);
+        var account = store.AddDefault();
+        account.AvatarImage = "synthetic/original.png";
+        store.Update(account);
+        var oldSnapshot = store.FindById(account.Id)!;
+        var draft = store.FindById(account.Id)!;
+        draft.AvatarImage = path;
+        Assert.Equal("synthetic/original.png", store.FindById(account.Id)!.AvatarImage);
+
+        store.Update(draft);
+        draft.AvatarImage = "synthetic/uncommitted.png";
+        var listSnapshot = Assert.Single(store.All());
+        Assert.Equal(path, listSnapshot.AvatarImage);
+        listSnapshot.AvatarImage = "synthetic/list-only.png";
+
+        Assert.Equal("synthetic/original.png", oldSnapshot.AvatarImage);
+        Assert.Equal(path, store.FindById(account.Id)!.AvatarImage);
+        Assert.Equal(path, new AccountsStore(kv).FindById(account.Id)!.AvatarImage);
+        Assert.Equal("synthetic/original.png",
+            Assert.Single(AccountJsonCodec.FromJsonOrNull(kv.GetString("list_prev", null))!).AvatarImage);
+    }
+
+    [Fact]
+    public void AvatarImage_FailedUpdate_PreservesPublishedStateAndBackup()
+    {
+        var kv = new FailingKv();
+        var store = new AccountsStore(kv);
+        var account = store.AddDefault();
+        account.AvatarImage = "synthetic/original.png";
+        store.Update(account);
+        var oldList = kv.GetString("list", null);
+        var oldBackup = kv.GetString("list_prev", null);
+        var draft = store.FindById(account.Id)!;
+        draft.AvatarImage = "synthetic/uncommitted.png";
+        kv.FailWrites = true;
+
+        Assert.Throws<IOException>(() => store.Update(draft));
+        Assert.Equal("synthetic/original.png", store.FindById(account.Id)!.AvatarImage);
+        Assert.Equal("synthetic/original.png", Assert.Single(store.All()).AvatarImage);
+        Assert.Equal("synthetic/original.png", new AccountsStore(kv).FindById(account.Id)!.AvatarImage);
+        Assert.Equal(oldList, kv.GetString("list", null));
+        Assert.Equal(oldBackup, kv.GetString("list_prev", null));
+    }
+
+    [Fact]
     public void FailedAdd_DoesNotPublishOrConsumeAnId()
     {
         var kv = new FailingKv();

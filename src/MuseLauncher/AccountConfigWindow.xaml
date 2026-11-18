@@ -51,15 +51,21 @@
         <TextBlock Text="头像" Style="{StaticResource FieldLabel}"/>
         <DockPanel Margin="0,8,0,0">
             <Border DockPanel.Dock="Left" x:Name="TilePreview" Width="44" Height="44" CornerRadius="12"
-                    Background="#151C28">
-                <TextBlock x:Name="TileText" Text="m" FontFamily="Georgia" FontWeight="Bold" FontStyle="Italic"
-                           FontSize="20" Foreground="#2F7CF6" HorizontalAlignment="Center"
-                           VerticalAlignment="Center" Margin="0,0,0,4"/>
+                    Background="#151C28" ClipToBounds="True">
+                <Grid>
+                    <Image x:Name="AvatarImagePreview" Stretch="UniformToFill" Visibility="Collapsed"/>
+                    <TextBlock x:Name="TileText" Text="m" FontFamily="Georgia" FontWeight="Bold" FontStyle="Italic"
+                               FontSize="20" Foreground="#2F7CF6" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" Margin="0,0,0,4"/>
+                </Grid>
             </Border>
             <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
                 <TextBox x:Name="AvatarInput" Style="{StaticResource FieldInput}"
                          TextChanged="OnAvatarChanged" Width="120" HorizontalAlignment="Left"/>
-                <TextBlock Text="1-2 个字符或 Emoji" Foreground="#8A9099" FontSize="11" Margin="0,4,0,0"/>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button Content="选择图片" Style="{StaticResource SmallBtn}" Click="OnChooseAvatarClick"/>
+                    <Button Content="恢复默认" Style="{StaticResource SmallBtn}" Margin="6,0,0,0" Click="OnResetAvatarClick"/>
+                </StackPanel>
             </StackPanel>
         </DockPanel>
 

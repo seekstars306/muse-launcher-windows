@@ -39,6 +39,8 @@ public static class Strings
     public const string CdFullscreen = "全屏显示当前账号";
     public const string CdRename = "重命名";
     public const string CdDelete = "删除账号";
+    public const string ContextDeleteFmt = "删除「{0}」";
+    public const string ConfirmDeleteTitle = "确认删除账号";
     public const string CdConfig = "账号配置";
     public const string SearchHint = "搜索名称或标签";
     public const string SearchEmpty = "没有匹配的账号";

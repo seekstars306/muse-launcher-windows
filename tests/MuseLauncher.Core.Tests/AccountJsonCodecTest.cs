@@ -39,6 +39,33 @@ public class AccountJsonCodecTest
         Assert.Equal("😊", back[1].Avatar);
     }
 
+    [Theory]
+    [InlineData("[{\"id\":3,\"name\":\"legacy\",\"avatar\":\"旧\"}]")]
+    [InlineData("[{\"id\":3,\"name\":\"legacy\",\"avatar\":\"旧\",\"avatarImage\":null}]")]
+    [InlineData("[{\"id\":3,\"name\":\"legacy\",\"avatar\":\"旧\",\"avatarImage\":42}]")]
+    public void AvatarImage_MissingOrInvalidOptionalField_PreservesAccount(string json)
+    {
+        var accounts = AccountJsonCodec.FromJsonOrNull(json, out var skipped);
+        var account = Assert.Single(accounts!);
+        Assert.False(skipped);
+        Assert.Equal(3L, account.Id);
+        Assert.Equal("legacy", account.Name);
+        Assert.Equal("旧", account.Avatar);
+        Assert.Equal("", account.AvatarImage);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(@"C:\synthetic avatars\头像 😊\image.png")]
+    public void AvatarImage_RoundTrip_PreservesPathAndTextFallback(string path)
+    {
+        var account = new Account(7, "synthetic") { Avatar = "头像", AvatarImage = path };
+        var json = AccountJsonCodec.ToJson(new[] { account });
+        var restored = Assert.Single(AccountJsonCodec.FromJsonOrNull(json)!);
+        Assert.Equal(path, restored.AvatarImage);
+        Assert.Equal(account.Avatar, restored.Avatar);
+    }
+
     [Fact]
     public void NullOrGarbage_ReturnsNull()
     {

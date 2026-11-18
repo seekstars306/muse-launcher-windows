@@ -24,6 +24,7 @@ public static class AccountJsonCodec
                 ["id"] = account.Id,
                 ["name"] = account.Name,
                 ["avatar"] = account.Avatar,
+                ["avatarImage"] = account.AvatarImage,
                 ["proxy"] = account.Proxy,
                 ["forceProxy"] = account.ForceProxy,
                 ["tags"] = account.Tags,
@@ -60,6 +61,8 @@ public static class AccountJsonCodec
                     var account = new Account(id, name);
                     if (item.TryGetProperty("avatar", out var avatar) && avatar.ValueKind == JsonValueKind.String)
                         account.Avatar = avatar.GetString() ?? "m";
+                    if (item.TryGetProperty("avatarImage", out var avatarImage) && avatarImage.ValueKind == JsonValueKind.String)
+                        account.AvatarImage = avatarImage.GetString() ?? "";
                     if (item.TryGetProperty("proxy", out var proxy) && proxy.ValueKind == JsonValueKind.String)
                         account.Proxy = proxy.GetString() ?? "";
                     if (item.TryGetProperty("forceProxy", out var force) && force.ValueKind == JsonValueKind.True)

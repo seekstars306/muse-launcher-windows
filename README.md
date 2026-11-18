@@ -12,8 +12,8 @@
 - 解压 Windows x64 自包含包，运行 `MuseLauncher.exe`；不需要单独安装 .NET，仍需要 Microsoft [WebView2 Evergreen Runtime](https://go.microsoft.com/fwlink/p/?LinkId=2124703)。
 - 添加账号后在 muse.ai 页面登录。服务端可能使会话失效，本程序不保证账号永不掉登录。
 - 左侧头像条和展开账号列表可切换账号；展开列表与网页左右并列，不覆盖 WebView2 原生窗口。
-- 设置可修改名称、头像、标签及代理；保存采用草稿，失败时不污染正在使用的配置。
-- 搜索按名称和标签过滤。`F11` 切换全屏；`Esc` 收起列表或退出全屏。
+- 设置可修改名称、头像、标签及代理；头像支持 PNG/JPG/BMP/GIF 图片，保存采用草稿，失败时不污染正在使用的配置。
+- 搜索按名称和标签过滤。`F11` 切换全屏；`Esc` 收起列表或退出全屏；展开列表可完全隐藏，鼠标移入窗口左边缘或按 `Ctrl+Shift+B` 恢复。
 - 默认最多保留 4 个浏览器会话。淘汰会真实销毁控件和代理隧道，但保留账号目录，切回时重新加载。
 - 删除账号会先等待其浏览器释放、保存列表，再删除对应目录；目录被占用时明确提示并保留，不会悄悄拿给新账号。
 
@@ -60,6 +60,7 @@ WebView2 的代理参数在浏览器环境启动时指定。配置变化后，�
 | 数据 | 位置 |
 |---|---|
 | 账号配置 | `%APPDATA%\MuseLauncher\accounts.json` |
+| 自定义头像 | 与账号配置同目录的 `Avatars\` |
 | 文件级滚动备份 | 同目录 `accounts.json.bak` |
 | 损坏文件留底 | 同目录独立的带时间/随机标识文件 |
 | 每账号 Cookie、网页存储 | `%LOCALAPPDATA%\MuseLauncher\Profiles\acct_N\` |
@@ -99,7 +100,7 @@ dotnet build MuseLauncher.sln -c Release
 dotnet run --project tests/MuseLauncher.WindowsSmoke -c Release
 ```
 
-入口只使用新临时目录、合成账号和本机模拟 HTTP 代理，不访问 muse.ai，也不使用真实代理密码。验证真实 WebView2 账号存储隔离、5 账号 LRU 控件释放、同网关换账密重建、创建失败与重试。Windows 维护者运行记录见 [REPAIR-TEST-REPORT.md](REPAIR-TEST-REPORT.md)。
+入口只使用新临时目录、合成账号和本机模拟 HTTP 代理，不访问 muse.ai，也不使用真实代理密码。验证真实 WebView2 账号存储隔离、5 账号 LRU 控件释放、同网关换账密重建、创建失败与重试。仅验证界面布局、头像和配置保存时，可运行 `dotnet run --project tests/MuseLauncher.WindowsSmoke -c Release -- --ui-only`；该模式不创建 WebView。Windows 维护者运行记录见 [REPAIR-TEST-REPORT.md](REPAIR-TEST-REPORT.md)。
 
 ### 本地构建包
 
