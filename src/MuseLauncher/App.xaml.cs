@@ -50,9 +50,7 @@ public partial class App : Application
             MainWindow = window;
             window.Show();
             StartPipeServer();
-#if DEBUG
             if (e.Args.Length > 0) pendingInputs.Add(e.Args);
-#endif
             foreach (var input in pendingInputs) DispatchInput(input);
             pendingInputs.Clear();
         }
@@ -162,8 +160,6 @@ public partial class App : Application
         if (MainWindow is not MainWindow window) return;
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
         window.Activate();
-#if DEBUG
         window.HandleLaunchCommands(args);
-#endif
     }
 }

@@ -45,8 +45,40 @@ public sealed class LaunchCommands
         DelAccountId = Lon(e, "del_account");
     }
 
-    /// <summary>release 构建（DEBUG == false）不响应任何调试参数。</summary>
+    /// <summary>release 构建（DEBUG == false）不响应调试/破坏性参数。</summary>
     public static bool Enabled(bool debugBuild) => debugBuild;
+
+    /// <summary>
+    /// Release 构建安全允许的只读导航参数（供账号桌面快捷方式使用）：
+    /// 仅接受 --start_account / --account（正数 ID）和 --fullscreen（true/false），忽略一切修改或删除参数。
+    /// </summary>
+    public static LaunchCommands ParseSafeNavigation(IReadOnlyList<string>? args)
+    {
+        var values = new Dictionary<string, object>();
+        if (args == null) return new LaunchCommands(values);
+        for (var index = 0; index < args.Count; index++)
+        {
+            var argument = args[index];
+            if (string.IsNullOrEmpty(argument) || !argument.StartsWith('-')) continue;
+            var option = argument.StartsWith("--", StringComparison.Ordinal) ? argument[2..] : argument[1..];
+            var equals = option.IndexOf('=');
+            var key = equals < 0 ? option : option[..equals];
+            if (key == "account") key = "start_account";
+            if (key is not ("start_account" or "fullscreen")) continue;
+            string? value = equals < 0 ? null : option[(equals + 1)..];
+            if (value == null && index + 1 < args.Count && !args[index + 1].StartsWith("-", StringComparison.Ordinal))
+            {
+                var next = args[index + 1];
+                if (key == "start_account" || bool.TryParse(next, out _)) { value = next; index++; }
+            }
+            if (key == "fullscreen")
+                values[key] = value == null || bool.TryParse(value, out var flag) && flag;
+            else if (long.TryParse(value, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out var id) && id > 0)
+                values[key] = id;
+        }
+        return new LaunchCommands(values);
+    }
 
     /// <summary>命令按键的类型解析，文本值不自动变成布尔或数字，也不吞下一个选项。</summary>
     public static LaunchCommands Parse(IReadOnlyList<string>? args)

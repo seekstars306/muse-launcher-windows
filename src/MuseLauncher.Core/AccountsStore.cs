@@ -171,4 +171,13 @@ public sealed class AccountsStore
 
     public bool IsFullscreen() { lock (gate) return prefs.GetBoolean("fullscreen", false); }
     public void SetFullscreen(bool value) { lock (gate) prefs.PutBoolean("fullscreen", value); }
+
+    public bool IsDarkTheme() { lock (gate) return prefs.GetBoolean("darkTheme", true); }
+    public void SetDarkTheme(bool value) { lock (gate) prefs.PutBoolean("darkTheme", value); }
+
+    public string GetDownloadDirectory() { lock (gate) return (prefs.GetString("downloadDir", "") ?? "").Trim(); }
+    public void SetDownloadDirectory(string? path) { lock (gate) prefs.PutString("downloadDir", (path ?? "").Trim()); }
+
+    public long GetLastUpdateCheckAt() { lock (gate) return prefs.GetLong("lastUpdateCheckAt", 0); }
+    public void SetLastUpdateCheckAt(long unixMs) { lock (gate) prefs.PutLong("lastUpdateCheckAt", unixMs); }
 }

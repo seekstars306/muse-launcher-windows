@@ -19,7 +19,7 @@ public static class AccountJsonCodec
         {
             if (account.Id <= 0 || !ids.Add(account.Id) || string.IsNullOrWhiteSpace(account.Name))
                 throw new InvalidDataException("账号 ID 或名称无效，未保存");
-            output.Add(new Dictionary<string, object?>
+            var entry = new Dictionary<string, object?>
             {
                 ["id"] = account.Id,
                 ["name"] = account.Name,
@@ -27,7 +27,10 @@ public static class AccountJsonCodec
                 ["proxy"] = account.Proxy,
                 ["forceProxy"] = account.ForceProxy,
                 ["tags"] = account.Tags,
-            });
+            };
+            if (!string.IsNullOrWhiteSpace(account.AvatarImage))
+                entry["avatarImage"] = account.AvatarImage.Trim();
+            output.Add(entry);
         }
         return JsonSerializer.Serialize(output, WriteOptions);
     }
@@ -60,6 +63,8 @@ public static class AccountJsonCodec
                     var account = new Account(id, name);
                     if (item.TryGetProperty("avatar", out var avatar) && avatar.ValueKind == JsonValueKind.String)
                         account.Avatar = avatar.GetString() ?? "m";
+                    if (item.TryGetProperty("avatarImage", out var avatarImage) && avatarImage.ValueKind == JsonValueKind.String)
+                        account.AvatarImage = (avatarImage.GetString() ?? "").Trim();
                     if (item.TryGetProperty("proxy", out var proxy) && proxy.ValueKind == JsonValueKind.String)
                         account.Proxy = proxy.GetString() ?? "";
                     if (item.TryGetProperty("forceProxy", out var force) && force.ValueKind == JsonValueKind.True)

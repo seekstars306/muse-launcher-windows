@@ -3,6 +3,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Windows;
+using Microsoft.Win32;
 using MuseLauncher.Core;
 
 namespace MuseLauncher;
@@ -14,18 +15,25 @@ public partial class AccountConfigWindow : Window
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
     private readonly Account original;
     private readonly Action<Account> save;
+    private readonly ThemePalette palette;
     private readonly CancellationTokenSource lifetime = new();
+    private readonly List<string> importedTempAvatars = new();
+    private string draftAvatarImage;
     private bool testing;
     private bool detecting;
 
     public bool Saved { get; private set; }
     public bool ProxyChanged { get; private set; }
 
-    public AccountConfigWindow(Account account, Action<Account> save)
+    public AccountConfigWindow(Account account, Action<Account> save, ThemePalette? palette = null)
     {
         original = account.Clone();
         this.save = save;
+        this.palette = palette ?? ThemePalette.Dark;
+        draftAvatarImage = account.AvatarImage ?? "";
         InitializeComponent();
+        ApplyTheme();
+
         AvatarInput.Text = account.Avatar;
         NameInput.Text = account.Name;
         ProxyInput.Text = account.Proxy;
@@ -33,7 +41,35 @@ public partial class AccountConfigWindow : Window
         TagsInput.Text = string.Join(", ", account.Tags);
         UpdateTile();
         Loaded += (_, _) => NameInput.Focus();
-        Closed += (_, _) => lifetime.Cancel();
+        Closed += (_, _) =>
+        {
+            lifetime.Cancel();
+            CleanupUnusedImportedAvatars();
+        };
+    }
+
+    private void ApplyTheme()
+    {
+        Background = palette.DrawerBg;
+        foreach (var label in new[] { LblAvatar, LblName, LblProxy, LblTags })
+            label.Foreground = palette.Foreground;
+        foreach (var hint in new[] { HintAvatar, HintProxy1, HintProxy2, HintTags, TestStatus })
+            hint.Foreground = palette.MutedText;
+        ForceProxyCheck.Foreground = palette.SecondaryText;
+
+        foreach (var input in new[] { AvatarInput, NameInput, ProxyInput, TagsInput })
+        {
+            input.Foreground = palette.Foreground;
+            input.CaretBrush = palette.Foreground;
+            input.Background = palette.InputBg;
+            input.BorderBrush = palette.BorderBrush;
+        }
+        foreach (var btn in new[] { UploadAvatarBtn, ClearAvatarBtn, DetectBtn, TestBtn, ShortcutBtn, CancelBtn })
+        {
+            btn.Background = palette.ButtonBg;
+            btn.Foreground = palette.Foreground;
+        }
+        SaveBtn.Background = palette.Accent;
     }
 
     private static string LimitText(string text, int length)
@@ -46,12 +82,64 @@ public partial class AccountConfigWindow : Window
 
     private void UpdateTile()
     {
-        if (TileText == null) return;
+        if (TilePreviewHost == null) return;
         var avatar = LimitText(AvatarInput.Text.Trim(), 2);
-        TileText.Text = string.IsNullOrEmpty(avatar) ? "m" : avatar;
+        TilePreviewHost.Child = AvatarStore.MakeAvatarTile(48, string.IsNullOrEmpty(avatar) ? "m" : avatar, draftAvatarImage, palette);
+        ClearAvatarBtn.Visibility = string.IsNullOrEmpty(draftAvatarImage) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OnAvatarChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => UpdateTile();
+
+    private void OnUploadAvatarClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择账号头像图片",
+            Filter = "图片文件 (*.png;*.jpg;*.jpeg;*.webp;*.bmp)|*.png;*.jpg;*.jpeg;*.webp;*.bmp|所有文件 (*.*)|*.*",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            var fileName = AvatarStore.ImportImage(original.Id, dialog.FileName);
+            importedTempAvatars.Add(fileName);
+            draftAvatarImage = fileName;
+            UpdateTile();
+            TestStatus.Text = "已导入头像图片（点击保存生效）";
+        }
+        catch (Exception ex)
+        {
+            TestStatus.Text = "导入头像失败：" + ex.Message;
+            Log.I("Avatar", "import failed: " + ex.GetType().Name);
+        }
+    }
+
+    private void OnClearAvatarClick(object sender, RoutedEventArgs e)
+    {
+        draftAvatarImage = "";
+        UpdateTile();
+        TestStatus.Text = "已切换回文字头像（点击保存生效）";
+    }
+
+    private void OnCreateShortcutClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var preview = original.Clone();
+            var avatar = LimitText(AvatarInput.Text.Trim(), 2);
+            preview.Avatar = string.IsNullOrEmpty(avatar) ? "m" : avatar;
+            preview.AvatarImage = draftAvatarImage;
+            var name = LimitText(NameInput.Text.Trim(), 16);
+            if (!string.IsNullOrEmpty(name)) preview.Name = name;
+
+            var path = DesktopShortcutHelper.CreateAccountShortcut(preview, palette);
+            TestStatus.Text = "已创建桌面快捷方式：" + Path.GetFileName(path);
+        }
+        catch (Exception ex)
+        {
+            TestStatus.Text = "创建快捷方式失败：" + ex.Message;
+            Log.I("Shortcut", "create failed: " + ex.GetType().Name);
+        }
+    }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
@@ -60,6 +148,7 @@ public partial class AccountConfigWindow : Window
             var draft = original.Clone();
             var avatar = LimitText(AvatarInput.Text.Trim(), 2);
             draft.Avatar = string.IsNullOrEmpty(avatar) ? "m" : avatar;
+            draft.AvatarImage = draftAvatarImage;
             var name = LimitText(NameInput.Text.Trim(), 16);
             if (!string.IsNullOrEmpty(name)) draft.Name = name;
             draft.Proxy = ProxyInput.Text.Trim();
@@ -73,6 +162,14 @@ public partial class AccountConfigWindow : Window
             // 账密与用户名中的 country/session 同样属于生效配置，不能只比较网关地址。
             ProxyChanged = draft.Proxy != original.Proxy || draft.ForceProxy != original.ForceProxy;
             save(draft);
+
+            // 旧图片已被替换或清除时清理磁盘残留
+            if (!string.IsNullOrEmpty(original.AvatarImage)
+                && !string.Equals(original.AvatarImage, draft.AvatarImage, StringComparison.OrdinalIgnoreCase))
+            {
+                AvatarStore.DeleteImage(original.AvatarImage);
+            }
+
             Saved = true;
             DialogResult = true;
         }
@@ -80,6 +177,16 @@ public partial class AccountConfigWindow : Window
             or InvalidOperationException or ArgumentException)
         {
             TestStatus.Text = "未保存：" + ex.Message;
+        }
+    }
+
+    private void CleanupUnusedImportedAvatars()
+    {
+        var keep = Saved ? draftAvatarImage : original.AvatarImage;
+        foreach (var file in importedTempAvatars)
+        {
+            if (!string.Equals(file, keep, StringComparison.OrdinalIgnoreCase))
+                AvatarStore.DeleteImage(file);
         }
     }
 

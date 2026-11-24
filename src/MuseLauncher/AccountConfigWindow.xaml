@@ -1,7 +1,7 @@
 <Window x:Class="MuseLauncher.AccountConfigWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="账号配置" Width="460" SizeToContent="Height"
+        Title="账号配置" Width="480" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="#121419" WindowStyle="SingleBorderWindow">
     <Window.Resources>
@@ -10,6 +10,7 @@
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Background" Value="#22252C"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -19,7 +20,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#2A2E36"/>
+                                <Setter TargetName="bd" Property="Opacity" Value="0.88"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="bd" Property="Opacity" Value="0.5"/>
@@ -46,57 +47,62 @@
         </Style>
     </Window.Resources>
 
-    <StackPanel Margin="18,16,18,16">
+    <StackPanel x:Name="RootPanel" Margin="18,16,18,16">
         <!-- 头像 -->
-        <TextBlock Text="头像" Style="{StaticResource FieldLabel}"/>
+        <TextBlock x:Name="LblAvatar" Text="头像" Style="{StaticResource FieldLabel}"/>
         <DockPanel Margin="0,8,0,0">
-            <Border DockPanel.Dock="Left" x:Name="TilePreview" Width="44" Height="44" CornerRadius="12"
-                    Background="#151C28">
-                <TextBlock x:Name="TileText" Text="m" FontFamily="Georgia" FontWeight="Bold" FontStyle="Italic"
-                           FontSize="20" Foreground="#2F7CF6" HorizontalAlignment="Center"
-                           VerticalAlignment="Center" Margin="0,0,0,4"/>
-            </Border>
+            <Border DockPanel.Dock="Left" x:Name="TilePreviewHost" Width="48" Height="48"/>
             <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                <TextBox x:Name="AvatarInput" Style="{StaticResource FieldInput}"
-                         TextChanged="OnAvatarChanged" Width="120" HorizontalAlignment="Left"/>
-                <TextBlock Text="1-2 个字符或 Emoji" Foreground="#8A9099" FontSize="11" Margin="0,4,0,0"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBox x:Name="AvatarInput" Style="{StaticResource FieldInput}"
+                             TextChanged="OnAvatarChanged" Width="108" HorizontalAlignment="Left"/>
+                    <Button x:Name="UploadAvatarBtn" Content="上传图片" Style="{StaticResource SmallBtn}"
+                            Margin="8,0,0,0" Click="OnUploadAvatarClick"/>
+                    <Button x:Name="ClearAvatarBtn" Content="清除图片" Style="{StaticResource SmallBtn}"
+                            Margin="6,0,0,0" Visibility="Collapsed" Click="OnClearAvatarClick"/>
+                </StackPanel>
+                <TextBlock x:Name="HintAvatar" Text="1-2 个字符/Emoji，或上传 PNG/JPG/WebP 图片（自动居中裁方）"
+                           Foreground="#8A9099" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
             </StackPanel>
         </DockPanel>
 
         <!-- 名称 -->
-        <TextBlock Text="名称" Style="{StaticResource FieldLabel}" Margin="0,16,0,0"/>
+        <TextBlock x:Name="LblName" Text="名称" Style="{StaticResource FieldLabel}" Margin="0,14,0,0"/>
         <TextBox x:Name="NameInput" Style="{StaticResource FieldInput}" MaxLength="16" Margin="0,8,0,0"/>
 
         <!-- 代理 -->
-        <TextBlock Text="代理" Style="{StaticResource FieldLabel}" Margin="0,16,0,0"/>
+        <TextBlock x:Name="LblProxy" Text="代理" Style="{StaticResource FieldLabel}" Margin="0,14,0,0"/>
         <TextBox x:Name="ProxyInput" Style="{StaticResource FieldInput}" Margin="0,8,0,0"/>
         <DockPanel Margin="0,8,0,0" LastChildFill="False">
             <Button x:Name="DetectBtn" Content="探测" Style="{StaticResource SmallBtn}" Click="OnDetectClick"/>
             <Button x:Name="TestBtn" Content="测活" Style="{StaticResource SmallBtn}" Margin="8,0,0,0" Click="OnTestClick"/>
             <TextBlock x:Name="TestStatus" DockPanel.Dock="Right" Foreground="#8A9099" FontSize="11.5"
-                       VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="240" TextAlignment="Right"/>
+                       VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="270" TextAlignment="Right"/>
         </DockPanel>
 
         <!-- 绕过控制仅约束浏览器的代理规则，不是系统级防直连 -->
         <CheckBox x:Name="ForceProxyCheck" Content="取消浏览器本机地址的代理绕过（不是 VPN 防泄漏）"
                   Foreground="#C3C8D0" FontSize="11.5" Margin="0,10,0,0"/>
 
-        <TextBlock Text="支持 HTTP / HTTPS / SOCKS5 上游认证，由每账号本机桥接处理。保存后重建环境，账号目录保留。"
-                   Foreground="#8A9099" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
-        <TextBlock Text="示例：http://用户名:密码@host:端口；特殊字符请百分号编码。HTTPS 上游验证证书；SOCKS5 由桥接完成真实认证。"
+        <TextBlock x:Name="HintProxy1" Text="支持 HTTP / HTTPS / SOCKS5 上游认证，由每账号本机桥接处理。保存后重建环境，账号目录保留。"
+                   Foreground="#8A9099" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
+        <TextBlock x:Name="HintProxy2" Text="示例：http://用户名:密码@host:端口；特殊字符请百分号编码。HTTPS 上游验证证书；SOCKS5 由桥接完成真实认证。"
                    Foreground="#6F7680" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap"/>
 
         <!-- 标签 -->
-        <TextBlock Text="标签" Style="{StaticResource FieldLabel}" Margin="0,16,0,0"/>
+        <TextBlock x:Name="LblTags" Text="标签" Style="{StaticResource FieldLabel}" Margin="0,14,0,0"/>
         <TextBox x:Name="TagsInput" Style="{StaticResource FieldInput}" Margin="0,8,0,0"/>
-        <TextBlock Text="用逗号分隔，如：电商, 主力, 测试（用于侧栏搜索过滤，每个最多 8 个字符）"
+        <TextBlock x:Name="HintTags" Text="用逗号分隔，如：电商, 主力, 测试（用于侧栏搜索过滤，每个最多 8 个字符）"
                    Foreground="#8A9099" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
 
         <!-- 操作 -->
-        <DockPanel Margin="0,20,0,0" LastChildFill="False">
-            <Button x:Name="CancelBtn" Content="取消" Style="{StaticResource SmallBtn}" Click="OnCancelClick"/>
-            <Button x:Name="SaveBtn" Content="保存" Style="{StaticResource SmallBtn}" Margin="8,0,0,0"
-                    Background="#3D7FFF" FontWeight="Bold" Click="OnSaveClick"/>
+        <DockPanel Margin="0,18,0,0" LastChildFill="False">
+            <Button x:Name="ShortcutBtn" Content="创建桌面快捷方式" Style="{StaticResource SmallBtn}"
+                    Click="OnCreateShortcutClick" ToolTip="在桌面生成该账号独立图标，双击直达并全屏"/>
+            <Button x:Name="SaveBtn" DockPanel.Dock="Right" Content="保存" Style="{StaticResource SmallBtn}"
+                    Margin="8,0,0,0" Background="#3D7FFF" Foreground="White" FontWeight="Bold" Click="OnSaveClick"/>
+            <Button x:Name="CancelBtn" DockPanel.Dock="Right" Content="取消" Style="{StaticResource SmallBtn}"
+                    Click="OnCancelClick"/>
         </DockPanel>
     </StackPanel>
 </Window>

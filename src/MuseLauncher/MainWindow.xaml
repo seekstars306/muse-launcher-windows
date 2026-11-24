@@ -10,6 +10,7 @@
             <Setter Property="Width" Value="40"/>
             <Setter Property="Height" Value="40"/>
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -18,10 +19,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#1E2127"/>
+                                <Setter TargetName="bd" Property="Opacity" Value="0.78"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#22252C"/>
+                                <Setter TargetName="bd" Property="Opacity" Value="0.62"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -34,6 +35,7 @@
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
             <Setter Property="Background" Value="#1E2127"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -42,7 +44,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#2A2E36"/>
+                                <Setter TargetName="bd" Property="Opacity" Value="0.82"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -50,7 +52,7 @@
             </Setter>
         </Style>
 
-        <!-- 小型文本按钮模板（删除/取消） -->
+        <!-- 小型文本按钮模板（删除/取消/工具条） -->
         <ControlTemplate x:Key="PillTemplate" TargetType="Button">
             <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="14"
                     Padding="{TemplateBinding Padding}">
@@ -59,6 +61,9 @@
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="bd" Property="Opacity" Value="0.45"/>
                 </Trigger>
             </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -69,6 +74,7 @@
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="14.5"/>
             <Setter Property="Background" Value="#3D7FFF"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -78,10 +84,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#4B8AFF"/>
+                                <Setter TargetName="bd" Property="Opacity" Value="0.9"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#2F6FE0"/>
+                                <Setter TargetName="bd" Property="Opacity" Value="0.78"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -97,95 +103,129 @@
         </Grid.ColumnDefinitions>
 
         <!-- ======= 左侧栏容器（Column 0）：收起态(56px) / 展开态(274px)，与主区WebView水平并列，彻底避免Airspace覆盖问题 ======= -->
-        <Border Grid.Column="0" Background="#0F1114" BorderBrush="#23262D" BorderThickness="0,0,1,0">
+        <Border x:Name="SidebarBorder" Grid.Column="0" Background="#0F1114" BorderBrush="#23262D" BorderThickness="0,0,1,0">
             <Grid>
                 <!-- ======= 收起态：左侧窄条（56px） ======= -->
                 <DockPanel x:Name="Rail" Width="56" LastChildFill="True" Visibility="Visible">
-                    <Button DockPanel.Dock="Top" x:Name="BtnRailExpand" Style="{StaticResource IconButton}"
-                            ToolTip="展开账号列表" Margin="8,8,8,0" Click="OnRailExpandClick">
-                        <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
-                    </Button>
+                    <Grid DockPanel.Dock="Top" Margin="8,8,8,0">
+                        <Button x:Name="BtnRailExpand" Style="{StaticResource IconButton}"
+                                ToolTip="展开账号列表" Click="OnRailExpandClick">
+                            <TextBlock x:Name="IconRailExpand" Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
+                        </Button>
+                        <Ellipse x:Name="RailUpdateDot" Width="8" Height="8" Fill="#FF4D4F"
+                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0"
+                                 Visibility="Collapsed" IsHitTestVisible="False"/>
+                    </Grid>
 
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,8">
+                        <Button x:Name="BtnRailTheme" Style="{StaticResource IconButton}"
+                                ToolTip="切换日间 / 夜间模式" Click="OnToggleThemeClick">
+                            <TextBlock x:Name="IconRailTheme" Text="&#xE706;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
+                        </Button>
                         <Button x:Name="BtnFullscreen" Style="{StaticResource IconButton}"
                                 ToolTip="全屏显示当前账号 (F11)" Click="OnFullscreenClick">
-                            <TextBlock Text="&#xE740;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
+                            <TextBlock x:Name="IconFullscreen" Text="&#xE740;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#AEB4BD"/>
                         </Button>
                         <Button x:Name="BtnRailAdd" Style="{StaticResource IconButton}"
                                 ToolTip="新建账号环境" Click="OnAddAccountClick">
-                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#3D7FFF"/>
+                            <TextBlock x:Name="IconRailAdd" Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#3D7FFF"/>
                         </Button>
                     </StackPanel>
 
-                    <ScrollViewer VerticalScrollBarVisibility="Hidden" Padding="0,2">
+                    <ScrollViewer VerticalScrollBarVisibility="Hidden" Padding="0,4">
                         <StackPanel x:Name="RailAvatars"/>
                     </ScrollViewer>
                 </DockPanel>
 
                 <!-- ======= 展开态：完整账号侧栏（274px） ======= -->
                 <DockPanel x:Name="DrawerContent" Width="274" LastChildFill="True" Visibility="Collapsed" Background="#121419">
-                    <!-- 标题栏：标题 + 收起按钮 -->
-                    <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="14,16,14,4">
+                    <!-- 标题栏：标题 + 日夜切换 + 收起按钮 -->
+                    <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="14,16,12,4">
                         <StackPanel>
-                            <TextBlock Text="Muse 账号" Foreground="#E9EBEE" FontSize="16.5" FontWeight="Bold"/>
+                            <TextBlock x:Name="DrawerTitleText" Text="Muse 账号" Foreground="#E9EBEE" FontSize="16.5" FontWeight="Bold"/>
                             <TextBlock x:Name="AccCount" Foreground="#8A9099" FontSize="11.5" Margin="0,3,0,0"/>
                         </StackPanel>
-                        <Button x:Name="BtnCollapse" DockPanel.Dock="Right" Width="34" Height="34"
+                        <Button x:Name="BtnCollapse" DockPanel.Dock="Right" Width="32" Height="32"
                                 Style="{StaticResource IconButtonSm}" ToolTip="收起列表" Click="OnCollapseClick">
-                            <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#AEB4BD"/>
+                            <TextBlock x:Name="IconCollapse" Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" FontSize="12.5" Foreground="#AEB4BD"/>
+                        </Button>
+                        <Button x:Name="BtnDrawerTheme" DockPanel.Dock="Right" Width="32" Height="32" Margin="0,0,6,0"
+                                Style="{StaticResource IconButtonSm}" ToolTip="切换日间 / 夜间模式" Click="OnToggleThemeClick">
+                            <TextBlock x:Name="IconDrawerTheme" Text="&#xE706;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="#AEB4BD"/>
                         </Button>
                     </DockPanel>
 
                     <!-- 搜索框 -->
-                    <Border DockPanel.Dock="Top" Background="#0F1114" CornerRadius="10"
-                            Margin="12,8,12,0">
+                    <Border x:Name="SearchBorder" DockPanel.Dock="Top" Background="#0F1114" CornerRadius="10"
+                            BorderBrush="#23262D" BorderThickness="1" Margin="12,8,12,0">
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="Segoe MDL2 Assets"
+                            <TextBlock x:Name="IconSearch" DockPanel.Dock="Left" Text="&#xE721;" FontFamily="Segoe MDL2 Assets"
                                        FontSize="13" Foreground="#6F7680" VerticalAlignment="Center" Margin="12,0,0,0"/>
                             <TextBox x:Name="SearchInput" TextChanged="OnSearchTextChanged"
                                      VerticalContentAlignment="Center" FontSize="13.5"
-                                     Foreground="#E9EBEE" Background="Transparent" BorderThickness="0"
-                                     Padding="0" Margin="11,0,12,0" Height="38"
-                                     VerticalAlignment="Center">
-                                <TextBox.Resources>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="#686E78"/>
-                                    </Style>
-                                </TextBox.Resources>
-                            </TextBox>
+                                     Foreground="#E9EBEE" CaretBrush="#E9EBEE" Background="Transparent" BorderThickness="0"
+                                     Padding="0" Margin="10,0,12,0" Height="36"
+                                     VerticalAlignment="Center"/>
                         </DockPanel>
                     </Border>
 
                     <!-- 搜索空态 -->
                     <TextBlock x:Name="DrawerEmpty" DockPanel.Dock="Bottom" Text="没有匹配的账号"
-                               Foreground="#8A9099" FontSize="12.5" TextAlignment="Center" Padding="0,18"
+                               Foreground="#8A9099" FontSize="12.5" TextAlignment="Center" Padding="0,14"
                                Visibility="Collapsed"/>
+
+                    <!-- 脚注与版本 -->
+                    <StackPanel DockPanel.Dock="Bottom" Margin="14,6,14,12">
+                        <DockPanel>
+                            <TextBlock x:Name="IconLock" DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="11.5" Foreground="#6F7680" VerticalAlignment="Top" Margin="0,2,0,0"/>
+                            <TextBlock x:Name="DrawerFootnoteText"
+                                       Text="每个账号使用完全隔离的存储环境，账号之间互不串数据。"
+                                       Foreground="#8A9099" FontSize="11" LineHeight="16" Margin="7,0,0,0"
+                                       TextWrapping="Wrap"/>
+                        </DockPanel>
+                        <TextBlock x:Name="VersionBadgeText" Foreground="#6F7680" FontSize="10.5" Margin="19,4,0,0"/>
+                    </StackPanel>
+
+                    <!-- 工具条：下载目录 + 检查更新 -->
+                    <UniformGrid DockPanel.Dock="Bottom" Columns="2" Margin="12,0,12,6">
+                        <Button x:Name="BtnDownloadDir" Template="{StaticResource PillTemplate}"
+                                Background="#151A22" Foreground="#AEB4BD" Padding="8,7" Margin="0,0,4,0"
+                                Cursor="Hand" Click="OnDownloadDirClick" MouseRightButtonUp="OnDownloadDirRightClick"
+                                ToolTip="点击设置全局下载目录（右键恢复默认）">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBlock Text="下载目录" FontSize="11.5" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="BtnCheckUpdate" Template="{StaticResource PillTemplate}"
+                                Background="#151A22" Foreground="#AEB4BD" Padding="8,7" Margin="4,0,0,0"
+                                Cursor="Hand" Click="OnCheckUpdateClick" ToolTip="检查 GitHub Releases 最新版本">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBlock Text="检查更新" FontSize="11.5" VerticalAlignment="Center"/>
+                                <Ellipse x:Name="DrawerUpdateDot" Width="7" Height="7" Fill="#FF4D4F"
+                                         Margin="5,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </Button>
+                    </UniformGrid>
 
                     <!-- 添加账号卡片 -->
                     <Border x:Name="BtnAddAccount" DockPanel.Dock="Bottom" Background="#151A22"
-                            CornerRadius="12" Margin="12,0,12,10" Padding="12" Cursor="Hand"
+                            CornerRadius="12" Margin="12,0,12,8" Padding="11" Cursor="Hand"
                             MouseLeftButtonUp="OnAddAccountClick">
                         <DockPanel>
-                            <Border DockPanel.Dock="Left" Width="36" Height="36" CornerRadius="18"
+                            <Border x:Name="AddCardIconBg" DockPanel.Dock="Left" Width="34" Height="34" CornerRadius="17"
                                     Background="#0F1114">
-                                <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                <TextBlock x:Name="AddCardPlus" Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="14"
                                            Foreground="#3D7FFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
-                            <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="添加 Muse 账号" Foreground="#E9EBEE" FontSize="14" FontWeight="Bold"/>
-                                <TextBlock Text="新开一个独立无痕的 muse.ai 页面" Foreground="#8A9099" FontSize="11.5" Margin="0,2,0,0"/>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="AddCardTitle" Text="添加 Muse 账号" Foreground="#E9EBEE" FontSize="13.5" FontWeight="Bold"/>
+                                <TextBlock x:Name="AddCardSub" Text="新开一个独立无痕的 muse.ai 页面" Foreground="#8A9099" FontSize="11" Margin="0,2,0,0"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
-
-                    <!-- 脚注 -->
-                    <DockPanel DockPanel.Dock="Bottom" Margin="16,12,16,16">
-                        <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="Segoe MDL2 Assets"
-                                   FontSize="12" Foreground="#6F7680" VerticalAlignment="Top" Margin="0,2,0,0"/>
-                        <TextBlock Text="每个账号使用完全隔离的存储环境，登录后状态持久保留，账号之间互不串数据。"
-                                   Foreground="#8A9099" FontSize="11.5" LineHeight="18" Margin="8,0,0,0"
-                                   TextWrapping="Wrap"/>
-                    </DockPanel>
 
                     <!-- 账号列表（最后声明 = 填充剩余垂直空间） -->
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -195,73 +235,99 @@
             </Grid>
         </Border>
 
-        <!-- ======= 主区（Column 1） ======= -->
-        <Grid Grid.Column="1" Background="#121316">
-            <!-- 账号 WebView 容器：每个账号一个独立 WebView，切换时换显示 -->
-            <Grid x:Name="WebContainer" Background="#121316"/>
+        <!-- ======= 主区（Column 1）：顶部外链栏 + 细进度条 + WebView2 容器，完全避开 Airspace 遮挡 ======= -->
+        <Grid x:Name="MainAreaGrid" Grid.Column="1" Background="#121316">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-            <!-- 空状态 -->
-            <StackPanel x:Name="EmptyState" Visibility="Collapsed" Background="#121316"
-                        VerticalAlignment="Center">
-                <Border Width="64" Height="64" CornerRadius="16" Background="#151C28"
-                        HorizontalAlignment="Center">
-                    <TextBlock Text="m" FontFamily="Georgia" FontWeight="Bold" FontStyle="Italic"
-                               FontSize="33" Foreground="#2F7CF6" Opacity="0.5"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,6"/>
-                </Border>
-                <TextBlock Text="还没有 Muse 账号" Foreground="#E9EBEE" FontSize="17" FontWeight="Bold"
-                           HorizontalAlignment="Center" Margin="0,14,0,0"/>
-                <TextBlock Text="每个账号都是一个完全隔离的无痕环境" Foreground="#8A9099" FontSize="12.5"
-                           HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                <Button x:Name="BtnEmptyAdd" Content="添加第一个 Muse 账号" Style="{StaticResource BluePill}"
-                        Padding="30,12" HorizontalAlignment="Center" Margin="0,18,0,0" Click="OnAddAccountClick"/>
-            </StackPanel>
+            <!-- 外部网页返回条（仅在当前页跳离 muse.ai 时显示） -->
+            <Border x:Name="ExternalNavBar" Grid.Row="0" Visibility="Collapsed"
+                    Background="#14171E" BorderBrush="#23262D" BorderThickness="0,0,0,1" Padding="12,7">
+                <DockPanel LastChildFill="True">
+                    <Button x:Name="BtnReturnMuse" DockPanel.Dock="Left" Content="← 返回 Muse"
+                            Template="{StaticResource PillTemplate}" Background="#3D7FFF" Foreground="White"
+                            FontSize="12" FontWeight="Bold" Padding="12,5" Cursor="Hand" Click="OnReturnMuseClick"/>
+                    <Button x:Name="BtnNavBack" DockPanel.Dock="Left" Content="后退"
+                            Template="{StaticResource PillTemplate}" Background="#1E2127" Foreground="#E9EBEE"
+                            FontSize="12" Padding="10,5" Margin="8,0,0,0" Cursor="Hand" Click="OnNavBackClick"/>
+                    <Button x:Name="BtnOpenExternal" DockPanel.Dock="Right" Content="在浏览器打开 ↗"
+                            Template="{StaticResource PillTemplate}" Background="#1E2127" Foreground="#E9EBEE"
+                            FontSize="12" Padding="10,5" Margin="8,0,0,0" Cursor="Hand" Click="OnOpenExternalClick"/>
+                    <TextBlock x:Name="ExternalHostText" Foreground="#8A9099" FontSize="12"
+                               VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                </DockPanel>
+            </Border>
 
-            <!-- 切换环境过渡层 -->
-            <Grid x:Name="Splash" Visibility="Collapsed" Background="#E6090A0C" IsHitTestVisible="True">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Border Width="54" Height="54" CornerRadius="14" Background="#151C28"
+            <!-- 顶部轻量加载进度条 -->
+            <ProgressBar x:Name="PageProgressBar" Grid.Row="1" Height="2.5" IsIndeterminate="True"
+                         Foreground="#3D7FFF" Background="Transparent" BorderThickness="0" Visibility="Collapsed"/>
+
+            <!-- WebView2 与遮罩层 -->
+            <Grid Grid.Row="2">
+                <!-- 账号 WebView 容器：每个账号一个独立 WebView，切换时换显示 -->
+                <Grid x:Name="WebContainer" Background="#121316"/>
+
+                <!-- 空状态 -->
+                <StackPanel x:Name="EmptyState" Visibility="Collapsed" Background="#121316"
+                            VerticalAlignment="Center">
+                    <Border x:Name="EmptyLogoBorder" Width="64" Height="64" CornerRadius="16" Background="#151C28"
                             HorizontalAlignment="Center">
-                        <TextBlock x:Name="SplashTile" Text="m" FontFamily="Georgia" FontWeight="Bold"
-                                   FontStyle="Italic" FontSize="27" Foreground="#2F7CF6"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,5"/>
-                    </Border>
-                    <TextBlock x:Name="SplashName" Foreground="#E9EBEE" FontSize="14.5" FontWeight="Bold"
-                               HorizontalAlignment="Center" Margin="0,12,0,0"/>
-                    <TextBlock Text="正在加载独立环境 · 数据互不相通" Foreground="#8A9099" FontSize="12"
-                               HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                    <ProgressBar IsIndeterminate="True" Width="110" Height="3" Margin="0,16,0,0"
-                                 Foreground="#3D7FFF" Background="#23262D" BorderThickness="0"/>
-                </StackPanel>
-            </Grid>
-
-            <!-- 加载失败遮罩 -->
-            <Grid x:Name="ErrorOverlay" Visibility="Collapsed" Background="#121316" IsHitTestVisible="True">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="30">
-                    <Border Width="64" Height="64" CornerRadius="16" Background="#2A1517"
-                            HorizontalAlignment="Center">
-                        <TextBlock Text="!" FontSize="33" FontWeight="Bold" Foreground="#8C2F36"
+                        <TextBlock x:Name="EmptyLogoText" Text="m" FontFamily="Georgia" FontWeight="Bold" FontStyle="Italic"
+                                   FontSize="33" Foreground="#2F7CF6" Opacity="0.6"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,6"/>
                     </Border>
-                    <TextBlock Text="页面加载失败" Foreground="#E9EBEE" FontSize="17" FontWeight="Bold"
+                    <TextBlock x:Name="EmptyTitleText" Text="还没有 Muse 账号" Foreground="#E9EBEE" FontSize="17" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,14,0,0"/>
-                    <TextBlock x:Name="ErrorMsg" Foreground="#8A9099" FontSize="12.5" TextWrapping="Wrap"
-                               MaxWidth="460" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,6,0,0"/>
-                    <TextBlock Text="请检查网络连接，或到账号配置里确认该账号的代理可用" Foreground="#8A9099"
-                               FontSize="11.5" HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                    <Button x:Name="BtnRetry" Content="重试" Style="{StaticResource BluePill}"
-                            Padding="34,12" HorizontalAlignment="Center" Margin="0,18,0,0" Click="OnRetryClick"/>
+                    <TextBlock x:Name="EmptySubText" Text="每个账号都是一个完全隔离的无痕环境" Foreground="#8A9099" FontSize="12.5"
+                               HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    <Button x:Name="BtnEmptyAdd" Content="添加第一个 Muse 账号" Style="{StaticResource BluePill}"
+                            Padding="30,12" HorizontalAlignment="Center" Margin="0,18,0,0" Click="OnAddAccountClick"/>
                 </StackPanel>
-            </Grid>
 
-            <!-- 轻提示：采用原生 Popup 窗口，悬浮于 WebView2 之上，不受 HWND Airspace 影响 -->
-            <Popup x:Name="ToastPopup" PlacementTarget="{Binding ElementName=WebContainer}"
-                   Placement="Center" AllowsTransparency="True" StaysOpen="True">
-                <Border Background="#F01D1F24" CornerRadius="8" Padding="16,10"
-                        BorderBrush="#2A2E36" BorderThickness="1">
-                    <TextBlock x:Name="ToastText" Foreground="#E9EBEE" FontSize="13"/>
-                </Border>
-            </Popup>
+                <!-- 切换环境过渡层 -->
+                <Grid x:Name="Splash" Visibility="Collapsed" Background="#E6090A0C" IsHitTestVisible="True">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Border x:Name="SplashTileHost" Width="54" Height="54" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="SplashName" Foreground="#E9EBEE" FontSize="14.5" FontWeight="Bold"
+                                   HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                        <TextBlock x:Name="SplashSubText" Text="正在加载独立环境 · 数据互不相通" Foreground="#8A9099" FontSize="12"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                        <ProgressBar x:Name="SplashProgress" IsIndeterminate="True" Width="110" Height="3" Margin="0,16,0,0"
+                                     Foreground="#3D7FFF" Background="#23262D" BorderThickness="0"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 加载失败遮罩 -->
+                <Grid x:Name="ErrorOverlay" Visibility="Collapsed" Background="#121316" IsHitTestVisible="True">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="30">
+                        <Border x:Name="ErrorBadge" Width="64" Height="64" CornerRadius="16" Background="#2A1517"
+                                HorizontalAlignment="Center">
+                            <TextBlock x:Name="ErrorBadgeText" Text="!" FontSize="33" FontWeight="Bold" Foreground="#D9535E"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,6"/>
+                        </Border>
+                        <TextBlock x:Name="ErrorTitleText" Text="页面加载失败" Foreground="#E9EBEE" FontSize="17" FontWeight="Bold"
+                                   HorizontalAlignment="Center" Margin="0,14,0,0"/>
+                        <TextBlock x:Name="ErrorMsg" Foreground="#8A9099" FontSize="12.5" TextWrapping="Wrap"
+                                   MaxWidth="460" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBlock x:Name="ErrorHintText" Text="请检查网络连接，或到账号配置里确认该账号的代理可用" Foreground="#8A9099"
+                                   FontSize="11.5" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                        <Button x:Name="BtnRetry" Content="重试" Style="{StaticResource BluePill}"
+                                Padding="34,12" HorizontalAlignment="Center" Margin="0,18,0,0" Click="OnRetryClick"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 轻提示：采用原生 Popup 窗口，悬浮于 WebView2 之上，不受 HWND Airspace 影响 -->
+                <Popup x:Name="ToastPopup" PlacementTarget="{Binding ElementName=WebContainer}"
+                       Placement="Center" AllowsTransparency="True" StaysOpen="True">
+                    <Border x:Name="ToastBorder" Background="#F01D1F24" CornerRadius="8" Padding="16,10"
+                            BorderBrush="#2A2E36" BorderThickness="1">
+                        <TextBlock x:Name="ToastText" Foreground="#E9EBEE" FontSize="13"/>
+                    </Border>
+                </Popup>
+            </Grid>
         </Grid>
     </Grid>
 </Window>
