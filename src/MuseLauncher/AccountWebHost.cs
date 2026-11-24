@@ -25,6 +25,8 @@ public sealed class AccountWebHost : IAsyncDisposable
     private int? browserProcessId;
     private bool disposing;
     private bool failureReported;
+    private bool isDarkTheme = true;
+    private int activeDownloads;
 
     public long AccountId { get; }
     public WebView2 Control { get; }
@@ -33,6 +35,11 @@ public sealed class AccountWebHost : IAsyncDisposable
     public string? ErrorMessage { get; private set; }
     public bool HasNavigated { get; private set; }
     public long? LoadStartAt { get; private set; }
+    public string CurrentUrl { get; private set; } = "";
+    public bool IsNavigating { get; private set; }
+    public bool IsSuspended { get; private set; }
+    public long LastActiveAt { get; private set; } = Environment.TickCount64;
+    public bool IsBusyInBackground => activeDownloads > 0 || (!disposing && Control.CoreWebView2?.IsDocumentPlayingAudio == true);
     public bool IsDisposed => disposing;
 
     public CoreWebView2 Core
@@ -47,6 +54,7 @@ public sealed class AccountWebHost : IAsyncDisposable
     public event Action<AccountWebHost>? NavigationStarting;
     public event Action<AccountWebHost, bool, string?>? NavigationCompleted;
     public event Action<AccountWebHost>? RendererFailed;
+    public event Action<AccountWebHost, string>? CurrentUrlChanged;
 
     internal AccountWebHost(long accountId, string profileDirectory, WebView2 control)
     {
@@ -69,7 +77,9 @@ public sealed class AccountWebHost : IAsyncDisposable
         long accountId,
         BrowserSessionConfiguration configuration,
         Action<WebView2> attachControl,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool isDarkTheme = true,
+        string? downloadDirectory = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var proxy = ProxyConfiguration.Parse(configuration.Proxy);
@@ -89,10 +99,10 @@ public sealed class AccountWebHost : IAsyncDisposable
 
         var control = new WebView2
         {
-            DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 0x12, 0x13, 0x16),
+            DefaultBackgroundColor = ThemePalette.For(isDarkTheme).WebViewBgColor,
             Visibility = Visibility.Hidden,
         };
-        var host = new AccountWebHost(accountId, profile, control);
+        var host = new AccountWebHost(accountId, profile, control) { isDarkTheme = isDarkTheme };
         try
         {
             if (proxy != null)
@@ -118,6 +128,8 @@ public sealed class AccountWebHost : IAsyncDisposable
             host.browserProcessId = (int)control.CoreWebView2.BrowserProcessId;
             cancellationToken.ThrowIfCancellationRequested();
             host.AttachEvents();
+            host.ApplyDownloadDirectory(downloadDirectory);
+            await host.ApplyThemeAsync(isDarkTheme, syncDom: false);
             Log.I("MuseWebview", $"created id={accountId} proxy={(proxy == null ? "system" : proxy.DisplayAddress)}");
             return host;
         }
@@ -153,21 +165,42 @@ public sealed class AccountWebHost : IAsyncDisposable
         core.NewWindowRequested += (_, e) =>
         {
             e.Handled = true;
-            if (!disposing && IsWebUri(e.Uri)) core.Navigate(e.Uri);
+            if (disposing || !IsWebUri(e.Uri)) return;
+            // Muse 与第三方登录页在应用内打开；普通外部链接用系统默认浏览器打开，避免离开对话回不来
+            if (MuseUrlHelper.IsInAppAuthHost(e.Uri)) core.Navigate(e.Uri);
+            else App.TryOpenUrl(e.Uri);
         };
         core.NavigationStarting += (_, e) =>
         {
             if (disposing) { e.Cancel = true; return; }
-            if (!IsWebUri(e.Uri) && e.Uri != "about:blank") { e.Cancel = true; return; }
+            if (!MuseUrlHelper.IsAllowedNavigationUri(e.Uri)) { e.Cancel = true; return; }
             HasNavigated = true;
+            IsNavigating = true;
             Errored = false;
             ErrorMessage = null;
             LoadStartAt = Environment.TickCount64;
             NavigationStarting?.Invoke(this);
         };
+        core.SourceChanged += (_, _) =>
+        {
+            if (disposing) return;
+            var url = core.Source ?? "";
+            if (!string.Equals(CurrentUrl, url, StringComparison.Ordinal))
+            {
+                CurrentUrl = url;
+                CurrentUrlChanged?.Invoke(this, url);
+            }
+        };
         core.NavigationCompleted += (_, e) =>
         {
             if (disposing || e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled) return;
+            IsNavigating = false;
+            var url = core.Source ?? "";
+            if (!string.Equals(CurrentUrl, url, StringComparison.Ordinal))
+            {
+                CurrentUrl = url;
+                CurrentUrlChanged?.Invoke(this, url);
+            }
             var success = e.IsSuccess && e.HttpStatusCode < 400;
             Errored = !success;
             Loaded |= success;
@@ -179,7 +212,35 @@ public sealed class AccountWebHost : IAsyncDisposable
                 Log.I("MusePerf", $"load end id={AccountId} cost={Environment.TickCount64 - started}ms errored={!success}");
                 LoadStartAt = null;
             }
+            if (success && MuseUrlHelper.IsMusePage(url))
+                _ = ApplyThemeAsync(isDarkTheme, syncDom: true);
             NavigationCompleted?.Invoke(this, success, ErrorMessage);
+        };
+        core.PermissionRequested += (_, e) =>
+        {
+            if (disposing) return;
+            if (e.PermissionKind is CoreWebView2PermissionKind.Microphone
+                or CoreWebView2PermissionKind.Camera
+                or CoreWebView2PermissionKind.ClipboardRead
+                && MuseUrlHelper.IsTrustedWebPermissionOrigin(e.Uri))
+            {
+                e.State = CoreWebView2PermissionState.Allow;
+            }
+        };
+        core.DownloadStarting += (_, e) =>
+        {
+            if (disposing || e.DownloadOperation == null) return;
+            Interlocked.Increment(ref activeDownloads);
+            var op = e.DownloadOperation;
+            void OnStateChanged(object? s, object args)
+            {
+                if (op.State != CoreWebView2DownloadState.InProgress)
+                {
+                    op.StateChanged -= OnStateChanged;
+                    Interlocked.Decrement(ref activeDownloads);
+                }
+            }
+            op.StateChanged += OnStateChanged;
         };
         core.ProcessFailed += (_, e) =>
         {
@@ -235,13 +296,129 @@ public sealed class AccountWebHost : IAsyncDisposable
 
     public void SetVisible(bool visible)
     {
-        if (!disposing) Control.Visibility = visible ? Visibility.Visible : Visibility.Hidden;
+        if (disposing) return;
+        if (visible)
+        {
+            ResumeIfSuspended();
+            LastActiveAt = Environment.TickCount64;
+        }
+        else
+        {
+            LastActiveAt = Environment.TickCount64;
+        }
+        Control.Visibility = visible ? Visibility.Visible : Visibility.Hidden;
     }
 
-    public void Reload() => Core.Reload();
-    public void Navigate(string url) => Core.Navigate(url);
+    public void TouchActivity() => LastActiveAt = Environment.TickCount64;
+
+    public void ApplyDownloadDirectory(string? directory)
+    {
+        if (disposing || Control.CoreWebView2 == null) return;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+                Control.CoreWebView2.Profile.DefaultDownloadFolderPath = directory;
+        }
+        catch (Exception ex)
+        {
+            Log.I("MuseWebview", $"set download dir failed id={AccountId} type={ex.GetType().Name}");
+        }
+    }
+
+    public async Task ApplyThemeAsync(bool dark, bool syncDom = true)
+    {
+        isDarkTheme = dark;
+        if (disposing || Control.CoreWebView2 == null) return;
+        try
+        {
+            Control.DefaultBackgroundColor = ThemePalette.For(dark).WebViewBgColor;
+            var core = Control.CoreWebView2;
+            core.Profile.PreferredColorScheme = dark
+                ? CoreWebView2PreferredColorScheme.Dark
+                : CoreWebView2PreferredColorScheme.Light;
+
+            var existing = await core.CookieManager.GetCookiesAsync("https://muse.ai/");
+            string? currentVal = null;
+            foreach (var c in existing)
+            {
+                if (string.Equals(c.Name, ThemeHelper.ThemeCookieName, StringComparison.Ordinal))
+                {
+                    currentVal = c.Value;
+                    if (!string.Equals(c.Domain, ThemeHelper.ThemeCookieDomain, StringComparison.OrdinalIgnoreCase))
+                        core.CookieManager.DeleteCookie(c);
+                }
+            }
+            var newVal = ThemeHelper.BuildUpdatedThemeCookieValue(currentVal, dark);
+            var cookie = core.CookieManager.CreateCookie(ThemeHelper.ThemeCookieName, newVal, ThemeHelper.ThemeCookieDomain, "/");
+            cookie.IsSecure = true;
+            cookie.SameSite = CoreWebView2CookieSameSiteKind.Lax;
+            cookie.Expires = DateTime.UtcNow.AddYears(1);
+            core.CookieManager.AddOrUpdateCookie(cookie);
+
+            if (syncDom && !IsSuspended && MuseUrlHelper.IsMusePage(core.Source))
+                await core.ExecuteScriptAsync(ThemeHelper.BuildDomThemeSyncScript(dark));
+        }
+        catch (Exception ex)
+        {
+            Log.I("MuseTheme", $"sync failed id={AccountId} type={ex.GetType().Name}");
+        }
+    }
+
+    public async Task<bool> TrySuspendAsync()
+    {
+        if (disposing || IsSuspended || IsBusyInBackground || Control.CoreWebView2 == null) return false;
+        try
+        {
+            Control.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+            var ok = await Control.CoreWebView2.TrySuspendAsync();
+            if (ok)
+            {
+                IsSuspended = true;
+                Log.I("MusePerf", $"suspended background id={AccountId}");
+            }
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            Log.I("MusePerf", $"suspend failed id={AccountId} type={ex.GetType().Name}");
+            return false;
+        }
+    }
+
+    public void ResumeIfSuspended()
+    {
+        if (disposing || !IsSuspended || Control.CoreWebView2 == null) return;
+        try
+        {
+            Control.CoreWebView2.Resume();
+            Control.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+            IsSuspended = false;
+            Log.I("MusePerf", $"resumed id={AccountId}");
+        }
+        catch (Exception ex)
+        {
+            Log.I("MusePerf", $"resume failed id={AccountId} type={ex.GetType().Name}");
+        }
+    }
+
+    public void Reload()
+    {
+        ResumeIfSuspended();
+        Core.Reload();
+    }
+
+    public void Navigate(string url)
+    {
+        ResumeIfSuspended();
+        Core.Navigate(url);
+    }
+
     public bool CanGoBack => !disposing && Control.CoreWebView2?.CanGoBack == true;
-    public void GoBack() => Core.GoBack();
+    public void GoBack()
+    {
+        ResumeIfSuspended();
+        Core.GoBack();
+    }
 
     /// <summary>导出整个 profile 中尚有效的 muse.ai Cookie；不导航，也不记录 Cookie 内容。</summary>
     public async Task<List<CredentialCookie>> ExportMuseCookiesAsync()
@@ -409,6 +586,7 @@ public sealed class AccountWebHost : IAsyncDisposable
         NavigationStarting = null;
         NavigationCompleted = null;
         RendererFailed = null;
+        CurrentUrlChanged = null;
         if (browserProcessId != null)
             PendingProfileExits[profileDirectory] = browserExited.Task;
 

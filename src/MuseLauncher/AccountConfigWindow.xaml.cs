@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.IO;
-using System.Security.Cryptography;
 using System.Net;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Windows;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
-using System.Net.Http;
-using System.Windows;
 using MuseLauncher.Core;
 
 namespace MuseLauncher;
@@ -16,10 +16,11 @@ public partial class AccountConfigWindow : Window
     private static readonly Uri TestUri = new("https://www.gstatic.com/generate_204");
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
     private readonly Account original;
-    private readonly Action<Account> save;
-    private readonly CancellationTokenSource lifetime = new();
     private readonly long accountId;
     private readonly string avatarDirectory;
+    private readonly Action<Account> save;
+    private readonly ThemePalette palette;
+    private readonly CancellationTokenSource lifetime = new();
     private bool testing;
     private bool detecting;
     private string avatarImagePath = "";
@@ -27,14 +28,17 @@ public partial class AccountConfigWindow : Window
     public bool Saved { get; private set; }
     public bool ProxyChanged { get; private set; }
 
-    public AccountConfigWindow(Account account, Action<Account> save, string? avatarDirectory = null)
+    public AccountConfigWindow(Account account, Action<Account> save, string? avatarDirectory = null, ThemePalette? palette = null)
     {
         original = account.Clone();
         accountId = account.Id;
         this.avatarDirectory = Path.GetFullPath(avatarDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MuseLauncher", "Avatars"));
         this.save = save;
+        this.palette = palette ?? ThemePalette.Dark;
         InitializeComponent();
+        ApplyTheme();
+
         AvatarInput.Text = account.Avatar;
         LoadAvatarImage(account.AvatarImage);
         NameInput.Text = account.Name;
@@ -44,6 +48,32 @@ public partial class AccountConfigWindow : Window
         UpdateTile();
         Loaded += (_, _) => NameInput.Focus();
         Closed += (_, _) => lifetime.Cancel();
+    }
+
+    private void ApplyTheme()
+    {
+        Background = palette.DrawerBg;
+        TilePreview.Background = palette.TileBg;
+        TileText.Foreground = palette.Accent;
+        foreach (var label in new[] { LblAvatar, LblName, LblProxy, LblTags })
+            label.Foreground = palette.Foreground;
+        foreach (var hint in new[] { HintAvatar, HintProxy1, HintProxy2, HintTags, TestStatus })
+            hint.Foreground = palette.MutedText;
+        ForceProxyCheck.Foreground = palette.SecondaryText;
+
+        foreach (var input in new[] { AvatarInput, NameInput, ProxyInput, TagsInput })
+        {
+            input.Foreground = palette.Foreground;
+            input.CaretBrush = palette.Foreground;
+            input.Background = palette.InputBg;
+            input.BorderBrush = palette.BorderBrush;
+        }
+        foreach (var btn in new[] { UploadAvatarBtn, ClearAvatarBtn, DetectBtn, TestBtn, ShortcutBtn, CancelBtn })
+        {
+            btn.Background = palette.ButtonBg;
+            btn.Foreground = palette.Foreground;
+        }
+        SaveBtn.Background = palette.Accent;
     }
 
     private static string LimitText(string text, int length)
@@ -56,7 +86,7 @@ public partial class AccountConfigWindow : Window
 
     private void LoadAvatarImage(string path)
     {
-        avatarImagePath = path;
+        avatarImagePath = path ?? "";
         AvatarImagePreview.Source = null;
         if (avatarImagePath.Length > 0)
         {
@@ -87,7 +117,11 @@ public partial class AccountConfigWindow : Window
     {
         if (TileText == null) return;
         var avatar = LimitText(AvatarInput.Text.Trim(), 2);
-        TileText.Text = string.IsNullOrEmpty(avatar) ? "m" : avatar;
+        var display = string.IsNullOrEmpty(avatar) ? "m" : avatar;
+        TileText.Text = display;
+        var count = new StringInfo(display).LengthInTextElements;
+        var hasWide = display.Any(ch => ch > 0x2E7F || char.IsSurrogate(ch));
+        TileText.FontSize = display == "m" ? 24 : count <= 1 ? (hasWide ? 20 : 22) : (hasWide ? 15 : 18);
     }
 
     private void OnAvatarChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => UpdateTile();
@@ -129,6 +163,27 @@ public partial class AccountConfigWindow : Window
     {
         AvatarInput.Text = "m";
         LoadAvatarImage("");
+    }
+
+    private void OnCreateShortcutClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var preview = original.Clone();
+            var avatar = LimitText(AvatarInput.Text.Trim(), 2);
+            preview.Avatar = string.IsNullOrEmpty(avatar) ? "m" : avatar;
+            preview.AvatarImage = avatarImagePath;
+            var name = LimitText(NameInput.Text.Trim(), 16);
+            if (!string.IsNullOrEmpty(name)) preview.Name = name;
+
+            var path = DesktopShortcutHelper.CreateAccountShortcut(preview, palette);
+            TestStatus.Text = "已创建桌面快捷方式：" + Path.GetFileName(path);
+        }
+        catch (Exception ex)
+        {
+            TestStatus.Text = "创建快捷方式失败：" + ex.Message;
+            Log.I("Shortcut", "create failed: " + ex.GetType().Name);
+        }
     }
 
     private string StoreAvatarImage(out string? createdPath)
@@ -176,6 +231,7 @@ public partial class AccountConfigWindow : Window
             ProxyChanged = draft.Proxy != original.Proxy || draft.ForceProxy != original.ForceProxy;
             draft.AvatarImage = StoreAvatarImage(out createdAvatar);
             save(draft);
+
             Saved = true;
             // 旧头像仍可能被账号备份引用，保留以支持恢复。
             createdAvatar = null;

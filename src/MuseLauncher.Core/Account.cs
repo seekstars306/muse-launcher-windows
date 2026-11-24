@@ -17,7 +17,7 @@ public class Account
     /// <summary>头像：1-2 个字符或 emoji，默认 "m"</summary>
     public string Avatar { get; set; } = "m";
 
-    /// <summary>可选头像图片的本地路径</summary>
+    /// <summary>自定义图片头像（可为应用数据 avatars 目录文件名，或本地图片完整路径；空表示使用文字头像）</summary>
     public string AvatarImage { get; set; } = "";
 
     /// <summary>代理地址，空 = 跟随系统网络</summary>
