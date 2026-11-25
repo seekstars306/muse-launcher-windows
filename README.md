@@ -2,19 +2,20 @@
 
 安卓版 [muse-launcher](https://github.com/seekstars306/muse-launcher) 的 Windows 版，基于 WPF + Microsoft Edge WebView2，直接加载 muse.ai 网页版。每个账号使用独立的用户数据目录，Cookie 和网页存储不共用。
 
-> **v1.0.4**：[下载正式版](https://github.com/seekstars306/muse-launcher-windows/releases/tag/v1.0.4)。已通过 245 项核心与本机模拟代理回归测试，并由维护者在 Windows 上完成 WebView2 冒烟验收。旧 v1.0.3 中“`--proxy-auth-scheme=basic` 可以提供 SOCKS5 账密认证”的说法有误；v1.0.4 改用真实的本机协议桥接，不依赖该参数。
+> **v1.1.0**：[下载正式版](https://github.com/seekstars306/muse-launcher-windows/releases/tag/v1.1.0)。已通过 431 项核心、加密凭据与本机模拟代理回归测试。新增日夜模式网页联动、左侧收缩栏高亮优化、外链返回导航栏、复用账号代理的在线检查更新、自定义默认下载目录、每账号独立桌面快捷方式、后台闲置自动挂起省内存，以及加密凭证迁移与账号拖拽排序。
 
 ## 下载与运行
 
-- [运行包：MuseLauncher-win-x64-v1.0.4.zip](https://github.com/seekstars306/muse-launcher-windows/releases/download/v1.0.4/MuseLauncher-win-x64-v1.0.4.zip)
-- [Windows 冒烟测试包：MuseLauncher-WindowsSmoke-v1.0.4.zip](https://github.com/seekstars306/muse-launcher-windows/releases/download/v1.0.4/MuseLauncher-WindowsSmoke-v1.0.4.zip)
+- [运行包：MuseLauncher-win-x64-v1.1.0.zip](https://github.com/seekstars306/muse-launcher-windows/releases/download/v1.1.0/MuseLauncher-win-x64-v1.1.0.zip)
 - 升级前退出旧版，并备份 `%APPDATA%\MuseLauncher` 和 `%LOCALAPPDATA%\MuseLauncher`。
 - 解压 Windows x64 自包含包，运行 `MuseLauncher.exe`；不需要单独安装 .NET，仍需要 Microsoft [WebView2 Evergreen Runtime](https://go.microsoft.com/fwlink/p/?LinkId=2124703)。
 - 添加账号后在 muse.ai 页面登录。服务端可能使会话失效，本程序不保证账号永不掉登录。
-- 左侧头像条和展开账号列表可切换账号；展开列表与网页左右并列，不覆盖 WebView2 原生窗口。展开后按住头像或账号名称上下拖动，可调整顺序；顺序自动保存，窄头像栏和导出文件同步采用该顺序。
-- 设置可修改名称、头像、标签及代理；头像支持 PNG/JPG/BMP/GIF 图片，保存采用草稿，失败时不污染正在使用的配置。
+- 左侧头像条和展开账号列表可切换账号（当前账号带左侧高亮指示条）；展开列表与网页左右并列，不覆盖 WebView2 原生窗口。展开后按住头像或账号名称上下拖动，可调整顺序；顺序自动保存，窄头像栏和导出文件同步采用该顺序。
+- 侧栏与抽屉支持一键切换日间 / 夜间模式，实时同步到 muse.ai 网页无需刷新；抽屉底部支持自定义全局默认下载目录（右键恢复默认）及检查 GitHub Releases 更新（自动复用账号代理）。
+- 设置可修改名称、头像、标签、代理及创建独立桌面快捷方式；头像支持 PNG/JPG/BMP/GIF 图片，保存采用草稿，失败时不污染正在使用的配置。
+- 普通新窗口外链自动由系统默认浏览器打开，登录认证页留在应用内；跳离 muse.ai 时顶部自动显示「← 返回 Muse / 后退 / 在浏览器打开」导航栏。
 - 搜索按名称和标签过滤。`F11` 切换全屏；`Esc` 收起列表或退出全屏；展开列表可完全隐藏，鼠标移入窗口左边缘或按 `Ctrl+Shift+B` 恢复。
-- 默认最多保留 4 个浏览器会话。淘汰会真实销毁控件和代理隧道，但保留账号目录，切回时重新加载。
+- 默认最多保留 4 个浏览器会话，后台闲置超过 3 分钟的账号会自动挂起降低内存占用（自动避开正在语音通话或下载中的账号），切回秒恢复；超出上限时淘汰会真实销毁控件和代理隧道，但保留账号目录。
 - 删除账号会先等待其浏览器释放、保存列表，再删除对应目录；目录被占用时明确提示并保留，不会悄悄拿给新账号。
 
 ## 加密凭证导入 / 导出
@@ -119,11 +120,11 @@ dotnet run --project tests/MuseLauncher.WindowsSmoke -c Release
 dotnet publish src/MuseLauncher -c Release -r win-x64 --self-contained true -o publish/release-win-x64
 ```
 
-Windows `build.ps1` 执行测试后生成本地包，不负责 GitHub 提交或发布。应用不带在线更新器，退出后解压到新目录或覆盖程序文件更新；用户数据位于独立用户目录。
+Windows `build.ps1` 执行测试后生成本地包，不负责 GitHub 提交或发布。应用支持在抽屉中检查 GitHub Releases 更新并下载安装包（自动复用账号代理），下载后退出旧版解压覆盖程序文件即可更新；用户数据位于独立用户目录。
 
-## Debug 参数
+## 启动与 Debug 参数
 
-仅 Debug 构建启用 `--start_account=N`、`--add_account`、`--del_account=N`、`--show_drawer`、`--open_config=N`、`--search_query=文本`、`--fullscreen=true|false`、`--dump_auth`。
+Release 构建仅放行只读导航参数 `--start_account=N`（或 `--account=N`）与 `--fullscreen=true|false`（供每账号桌面快捷方式使用）；`--add_account`、`--del_account=N`、`--show_drawer`、`--open_config=N`、`--search_query=文本`、`--dump_auth` 仍仅在 Debug 构建启用。
 
 ```bash
 dotnet run --project src/MuseLauncher -- --start_account=2 --show_drawer

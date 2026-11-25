@@ -1,9 +1,9 @@
-# Windows 正式包构建。不自动执行 git 提交、推送或发布。
+﻿# Windows 正式包构建。不自动执行 git 提交、推送或发布。
 param([switch]$RunWindowsSmoke)
 $ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
 try {
-    $version = "1.0.4"
+    $version = "1.1.0"
     $outDir = "publish/release-win-x64"
     $zip = "publish/MuseLauncher-win-x64-v$version.zip"
     Write-Host "== Core + loopback 协议回归 ==" -ForegroundColor Cyan
